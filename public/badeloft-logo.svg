@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 55" role="img" aria-labelledby="title">
+  <title id="title">Badeloft Luxury Bathrooms</title>
+  <rect width="200" height="55" fill="#101010"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 9h48"/>
+    <path d="M13 12c2 17 9 25 20 25s18-8 20-25"/>
+    <path d="M18 22h30"/>
+    <path d="M22 27h22"/>
+    <path d="M16 37h34"/>
+  </g>
+  <text x="68" y="24" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700">Badeloft</text>
+  <text x="18" y="45" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="17" letter-spacing=".3">Luxury Bathrooms</text>
+</svg>
