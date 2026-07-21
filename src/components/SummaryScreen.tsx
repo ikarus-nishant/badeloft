@@ -16,6 +16,7 @@ const labels = {
   CUSTOM_TRIPLE: "Custom Triple Sink",
   wall_mounted: "Wall Mounted",
   countertop: "Countertop",
+  undermount: "Undermount",
   single: "Single",
   double: "Double",
   triple: "Triple",
@@ -36,7 +37,7 @@ export function SummaryScreen({ config, errors, onBack, onSuccess }: SummaryScre
         <div><span>Bowl</span><strong>{config.bowl?.name ?? "-"}</strong></div>
         <div><span>Bowl Quantity</span><strong>{config.bowlQuantity ? labels[config.bowlQuantity] : "-"}</strong></div>
         <div><span>Mounting Type</span><strong>{config.mountingType ? labels[config.mountingType] : "-"}</strong></div>
-        <div><span>Overall Length</span><strong>{dims.L ?? "-"} mm</strong></div>
+        <div><span>Overall Width</span><strong>{dims.L ?? "-"} mm</strong></div>
         <div><span>Overall Depth</span><strong>{dims.D ?? "-"} mm</strong></div>
         <div><span>Height</span><strong>{dims.H ?? "-"} mm</strong></div>
       </div>

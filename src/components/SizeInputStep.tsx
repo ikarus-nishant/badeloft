@@ -14,7 +14,7 @@ export function SizeInputStep({ dimensions, sinkType, onChange }: SizeInputStepP
       <div className="field-grid">
         {(["L", "D", "H"] as Array<keyof SinkDimensions>).map((field) => (
           <label className="field" key={field}>
-            <span>{field === "D" ? "Depth / Width D" : field === "L" ? "Length L" : "Height H"}</span>
+            <span>{field === "D" ? "Depth D" : field === "L" ? "Width L" : "Height H"}</span>
             <input min="1" type="number" value={dimensions[field] ?? ""} onChange={(event) => onChange(field, Number(event.target.value))} />
             <small>mm</small>
           </label>

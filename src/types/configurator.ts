@@ -2,7 +2,7 @@ export type SinkType = "WT_04" | "CUSTOM_SINGLE" | "CUSTOM_DOUBLE" | "CUSTOM_TRI
 
 export type BowlQuantity = "single" | "double" | "triple";
 
-export type MountingType = "wall_mounted" | "countertop";
+export type MountingType = "wall_mounted" | "countertop" | "undermount";
 
 export interface BowlOption {
   id: string;
