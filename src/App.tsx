@@ -1,7 +1,6 @@
 import { Bath, Box, Palette, Pencil, Redo2, RefreshCw, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
-import { DimensionDiagram } from "./components/DimensionDiagram";
 import { bowlOptions } from "./data/bowlOptions";
 import type { BowlOption, BowlQuantity, SinkConfiguration, SinkDimensions } from "./types/configurator";
 import { mergedDimensions } from "./utils/calculations";
@@ -98,7 +97,6 @@ function distributeOffsetDelta(targetOverall: number, fixedSize: number, firstOf
 function App() {
   const [config, setConfig] = useState<SinkConfiguration>(initialConfig);
   const [activeBuildMode, setActiveBuildMode] = useState<"build" | "finish">("build");
-  const [stageMode, setStageMode] = useState<"3d" | "2d">("3d");
   const [viewerResetToken, setViewerResetToken] = useState(0);
   const [showBuildSummary, setShowBuildSummary] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
@@ -314,46 +312,34 @@ function App() {
       </aside>
 
       <section className="stage">
-        <div className="view-mode-toggle" aria-label="View mode">
-          <button className={stageMode === "3d" ? "active" : ""} onClick={() => setStageMode("3d")} type="button">3D</button>
-          <button className={stageMode === "2d" ? "active" : ""} onClick={() => setStageMode("2d")} type="button">2D</button>
-        </div>
         <div className="stage-canvas">
-          {stageMode === "3d" ? (
-            <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} />
-          ) : (
-            <div className="stage-2d-view">
-              <DimensionDiagram config={config} errors={[]} />
-            </div>
-          )}
+          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} />
         </div>
-        {stageMode === "3d" && (
-          <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
-            <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
-              <Undo2 size={25} />
-            </button>
-            <button className="toolbar-icon" aria-label="Redo" disabled={!canRedo} onClick={redo} title="Redo" type="button">
-              <Redo2 size={25} />
-            </button>
-            <button className="toolbar-icon" aria-label="Reset view" onClick={() => setViewerResetToken((token) => token + 1)} title="Reset view" type="button">
-              <RefreshCw size={24} />
-            </button>
-            <button
-              aria-label="Sink view selected"
-              aria-pressed="true"
-              className="toolbar-icon toolbar-product"
-              onClick={() => setViewerResetToken((token) => token + 1)}
-              title="Sink view"
-              type="button"
-            >
-              <Bath size={24} />
-            </button>
-            <button className="toolbar-ar" disabled title="AR preview is not available in this prototype" type="button">
-              <Box size={21} />
-              <span>View in your space</span>
-            </button>
-          </div>
-        )}
+        <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
+          <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
+            <Undo2 size={25} />
+          </button>
+          <button className="toolbar-icon" aria-label="Redo" disabled={!canRedo} onClick={redo} title="Redo" type="button">
+            <Redo2 size={25} />
+          </button>
+          <button className="toolbar-icon" aria-label="Reset view" onClick={() => setViewerResetToken((token) => token + 1)} title="Reset view" type="button">
+            <RefreshCw size={24} />
+          </button>
+          <button
+            aria-label="Sink view selected"
+            aria-pressed="true"
+            className="toolbar-icon toolbar-product"
+            onClick={() => setViewerResetToken((token) => token + 1)}
+            title="Sink view"
+            type="button"
+          >
+            <Bath size={24} />
+          </button>
+          <button className="toolbar-ar" disabled title="AR preview is not available in this prototype" type="button">
+            <Box size={21} />
+            <span>View in your space</span>
+          </button>
+        </div>
       </section>
 
       <aside className="right-panel">
@@ -394,11 +380,8 @@ function App() {
                 <SliderRow label="Height" max={500} min={80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
               </section>
 
-              <section className="control-section dimension-card-section">
-                <span className="section-label side-spacing-title">Side Spacing</span>
-                <div className="mini-diagram">
-                  <DimensionDiagram config={config} errors={[]} />
-                </div>
+              <section className="control-section side-spacing-section">
+                <span className="section-label">Side Spacing</span>
                 <div className="offset-grid">
                   <OffsetControl label="Left" value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
                   <OffsetControl label="Right" value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
@@ -406,6 +389,7 @@ function App() {
                   <OffsetControl label="Rear" value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
                 </div>
               </section>
+
             </>
           ) : (
             <div className="finish-menu">
@@ -616,7 +600,6 @@ function OffsetControl({ label, onChange, value }: OffsetControlProps) {
     </label>
   );
 }
-
 interface NumericInputProps {
   ariaLabel: string;
   max: number;
