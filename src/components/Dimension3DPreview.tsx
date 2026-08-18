@@ -72,6 +72,8 @@ interface CountertopModelProps {
   height: number;
   length: number;
   modelUrl?: string;
+  bowlColor: string;
+  bowlFinish: BowlFinish;
 }
 
 const unit = 180;
@@ -132,6 +134,7 @@ const bowlModelUrls: Record<string, string> = {
   "UB-04-M": "/models/UB-04-M.glb",
   "UB-04-L": "/models/UB-04-L.glb",
   "UB-04-RL": "/models/UB-04-RL.glb",
+  "UB-04-LR": "/models/UB-04-LR.glb",
   "UB-04-32": "/models/UB-04-32.glb",
   "UB-04-40": "/models/UB-04-40.glb",
   "UB-04-XL": "/models/UB-04-XL.glb",
@@ -200,14 +203,16 @@ function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, l
 
 function CountertopModel(props: CountertopModelProps) {
   const geometries = useCountertopGeometries(props);
+  const { bowlColor, bowlFinish } = props;
+  const surfaceRoughness = bowlFinish === "matte" ? 0.72 : 0.2;
 
   return (
     <>
       <mesh castShadow geometry={geometries.base} receiveShadow>
-        <meshStandardMaterial color={countertopMaterial.color} roughness={countertopMaterial.roughness} metalness={countertopMaterial.metalness} />
+        <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
       </mesh>
       <mesh geometry={geometries.cap} receiveShadow>
-        <meshStandardMaterial color="#080808" roughness={0.38} metalness={0.08} />
+        <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
       </mesh>
     </>
   );
@@ -250,9 +255,9 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
             material.metalness = drainMaterial.metalness;
             material.roughness = drainMaterial.roughness;
           } else if (modelPart === "connector") {
-            material.color.set(countertopMaterial.color);
-            material.metalness = countertopMaterial.metalness;
-            material.roughness = countertopMaterial.roughness;
+            material.color.set(bowlColor);
+            material.metalness = 0.04;
+            material.roughness = bowlFinish === "matte" ? 0.72 : 0.2;
           }
 
           return material;
@@ -348,7 +353,7 @@ function SinkModel({ appearance, config }: SinkModelProps) {
   const sceneLeftInset = toScene(leftInset);
   const sceneRightInset = toScene(rightInset);
   const sceneTopInset = toScene(topInset);
-  const sceneInternalGap = count > 1 ? Math.max(0, (sceneLength - sceneLeftInset - sceneRightInset - count * sceneBowlLength) / (count - 1)) : 0;
+  const sceneInternalGap = count > 1 ? toScene(Number(dims.bowlSpacing || 0)) : 0;
   const modelUrl = config.bowl?.id ? bowlModelUrls[config.bowl.id] : undefined;
 
   const bowls = Array.from({ length: count }, (_, index) => ({
@@ -359,6 +364,8 @@ function SinkModel({ appearance, config }: SinkModelProps) {
   return (
     <group rotation={[0, -0.18, 0]}>
       <CountertopModel
+        bowlColor={appearance.bowlColor}
+        bowlFinish={appearance.bowlFinish}
         bowlDepth={sceneBowlDepth}
         bowlWidth={sceneBowlLength}
         bowls={bowls}
@@ -430,6 +437,8 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
   const updateLightSetting = (key: LightSettingKey, value: number) => {
     setLightSettings((previous) => ({ ...previous, [key]: value }));
   };
+
+  const maxZoomDistance = Math.max(11, toScene(length) * 2.2);
 
   return (
     <section className="preview-3d" aria-label="3D sink visualization">
@@ -503,7 +512,6 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
           </aside>
         )}
         <Canvas camera={{ position: [4.7, 4.1, 5.4], fov: 38 }} shadows>
-          <color attach="background" args={["#f1ede7"]} />
           <ambientLight intensity={lightSettings.ambientIntensity} />
                     <directionalLight
             castShadow
@@ -524,7 +532,7 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
             <planeGeometry args={[12, 9]} />
             <shadowMaterial opacity={1} />
           </mesh>
-          <Environment preset="apartment" />
+          <Environment files="/environment/alte_veste_station_2k.hdr" environmentIntensity={0.4} />
           <EffectComposer enableNormalPass multisampling={0}>
             <SSAO
               bias={lightSettings.ssaoBias}
@@ -535,7 +543,7 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
               samples={lightSettings.ssaoSamples}
             />
           </EffectComposer>
-          <OrbitControls enableDamping makeDefault maxDistance={11} minDistance={3} target={[0, 0.45, 0]} />
+          <OrbitControls enableDamping enablePan={false} makeDefault maxDistance={maxZoomDistance} minDistance={3} target={[0, 0.45, 0]} />
         </Canvas>
       </div>
     </section>

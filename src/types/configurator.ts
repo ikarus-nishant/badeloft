@@ -29,6 +29,7 @@ export interface SinkDimensions {
   D1?: number;
   D2?: number;
   D3?: number;
+  bowlSpacing?: number;
 }
 
 export interface SinkConfiguration {

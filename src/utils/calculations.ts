@@ -6,7 +6,8 @@ export function calculateLength(config: SinkConfiguration): number | null {
 
   const L1 = bowl.size.length;
   const count = bowlQuantity === "triple" ? 3 : bowlQuantity === "double" ? 2 : 1;
-  return count * L1 + Number(dimensions.L2 || 0) + Number(dimensions.L3 || 0);
+  const gap = count > 1 ? Number(dimensions.bowlSpacing || 0) : 0;
+  return count * L1 + (count - 1) * gap + Number(dimensions.L2 || 0) + Number(dimensions.L3 || 0);
 }
 
 export function calculateDepth(config: SinkConfiguration): number | null {
@@ -37,5 +38,6 @@ export function mergedDimensions(config: SinkConfiguration): SinkDimensions {
     ...lockedDimensions(config),
     L: calculateLength(config) ?? config.dimensions.L,
     D: calculateDepth(config) ?? config.dimensions.D,
+    bowlSpacing: config.dimensions.bowlSpacing ?? 0,
   };
 }
