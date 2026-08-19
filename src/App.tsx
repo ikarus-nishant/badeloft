@@ -5,7 +5,6 @@ import { bowlOptions } from "./data/bowlOptions";
 import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
 import { mergedDimensions } from "./utils/calculations";
 import { Card } from "./components/Card";
-import { SpacingDiagram } from "./components/SpacingDiagram";
 import { Tooltip } from "./components/Tooltip";
 
 const selectedStartBowl = bowlOptions[0];
@@ -140,6 +139,45 @@ function ColorWheelIcon() {
   );
 }
 
+type BowlShape = "rectangle" | "oval";
+type BowlSize = "S" | "M" | "L" | "XL" | "XXL";
+
+const bowlDetails: Record<string, { shape: BowlShape; size: BowlSize; displayName: string }> = {
+  "UB-01": { shape: "rectangle", size: "M", displayName: "01" },
+  "UB-02": { shape: "oval", size: "M", displayName: "02" },
+  "UB-03": { shape: "oval", size: "M", displayName: "03" },
+  "UB-04-M": { shape: "rectangle", size: "M", displayName: "04-M" },
+  "UB-04-L": { shape: "rectangle", size: "L", displayName: "04-L" },
+  "UB-04-RL": { shape: "rectangle", size: "M", displayName: "04-RL" },
+  "UB-04-LR": { shape: "rectangle", size: "M", displayName: "04-LR" },
+  "UB-04-32": { shape: "rectangle", size: "L", displayName: "04-32" },
+  "UB-04-40": { shape: "rectangle", size: "XL", displayName: "04-40" },
+  "UB-04-XL": { shape: "rectangle", size: "XL", displayName: "04-XL" },
+  "UB-04-XXL": { shape: "rectangle", size: "XXL", displayName: "04-XXL" },
+  "UB-05-M": { shape: "rectangle", size: "M", displayName: "05-M" },
+  "UB-05-L": { shape: "oval", size: "L", displayName: "05-L" },
+  "UB-05-XL": { shape: "oval", size: "XL", displayName: "05-XL" },
+};
+
+function getShapeAndSizeFromBowlId(bowlId: string): { shape: BowlShape; size: BowlSize } {
+  const details = bowlDetails[bowlId];
+  if (details) {
+    return { shape: details.shape, size: details.size };
+  }
+  return { shape: "rectangle", size: "M" };
+}
+
+const sizePrices: Record<BowlSize, number> = {
+  S: 0,
+  M: 70,
+  L: 140,
+  XL: 210,
+  XXL: 280,
+};
+
+const shapes: BowlShape[] = ["rectangle", "oval"];
+const sizes: BowlSize[] = ["S", "M", "L", "XL", "XXL"];
+
 function App() {
   const [config, setConfig] = useState<SinkConfiguration>(initialConfig);
   const [activeBuildMode, setActiveBuildMode] = useState<"build" | "finish">("build");
@@ -179,9 +217,62 @@ function App() {
     ? "Custom"
     : bowlColorOptions.find((option) => option.id === bowlColor)?.label ?? "White";
   const selectedDrainFinish = drainFinishOptions.find((option) => option.id === drainFinish) ?? drainFinishOptions[0];
+  const bowlId = config.bowl?.id ?? "UB-01";
+  const { shape: selectedShape, size: selectedSize } = getShapeAndSizeFromBowlId(bowlId);
+  const sizePrice = selectedShape === "oval" ? 0 : sizePrices[selectedSize];
   const quantityPrice = bowlCount * 140;
-  const buildTotal = 350 + quantityPrice + 150;
+  const buildTotal = 350 + quantityPrice + sizePrice + 150;
   const total = buildTotal + selectedDrainFinish.price;
+
+  const getFilteredBowls = (shape: BowlShape, size: BowlSize) => {
+    if (shape === "oval") {
+      return bowlOptions.filter((b) => b.id === "UB-02" || b.id === "UB-03");
+    }
+    return bowlOptions.filter((b) => {
+      const details = bowlDetails[b.id];
+      return details && details.shape === "rectangle" && details.size === size;
+    });
+  };
+
+  const filteredBowls = getFilteredBowls(selectedShape, selectedSize);
+
+  const updateBowlById = (id: string) => {
+    const newBowl = bowlOptions.find((b) => b.id === id);
+    if (newBowl) {
+      updateBowl(newBowl);
+    }
+  };
+
+  const isSizeDisabled = (shape: BowlShape, size: BowlSize) => {
+    if (shape === "oval") {
+      return true;
+    }
+    if (shape === "rectangle") {
+      return size === "S";
+    }
+    return false;
+  };
+
+  const handleShapeChange = (newShape: BowlShape) => {
+    let targetSize = selectedSize;
+    if (newShape === "rectangle" && targetSize === "S") {
+      targetSize = "M";
+    }
+    const matching = getFilteredBowls(newShape, targetSize);
+    if (matching.length > 0) {
+      const exists = matching.find((b) => b.id === config.bowl?.id);
+      updateBowl(exists || matching[0]);
+    }
+  };
+
+  const handleSizeChange = (newSize: BowlSize) => {
+    if (isSizeDisabled(selectedShape, newSize)) return;
+    const matching = getFilteredBowls(selectedShape, newSize);
+    if (matching.length > 0) {
+      const exists = matching.find((b) => b.id === config.bowl?.id);
+      updateBowl(exists || matching[0]);
+    }
+  };
 
   useEffect(() => {
     if (!showBuildSummary) return;
@@ -341,30 +432,10 @@ function App() {
 
   return (
     <main className="builder-page">
-      <aside className="left-rail">
-        <section className="brand-card">
-          <img src="/Badeloft Logo.jpg" alt="Badeloft" />
-          <span>Powered by <strong>Ikarus Delta</strong></span>
-        </section>
-
-        <section className="bowl-library">
-          <h1>{productTitle}</h1>
-          <h2>Bowl Type</h2>
-          <div className="bowl-tile-grid">
-            {bowlOptions.map((bowl) => (
-              <Card
-                key={bowl.id}
-                image={bowl.image}
-                label={bowl.name}
-                selected={config.bowl?.id === bowl.id}
-                onClick={() => updateBowl(bowl)}
-              />
-            ))}
-          </div>
-        </section>
-      </aside>
-
       <section className="stage">
+        <div className="stage-brand-badge">
+          <img src="/assets/poweredby-logo.png" alt="Powered by Ikarus Delta" />
+        </div>
         <div className="stage-canvas">
           <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} />
         </div>
@@ -469,27 +540,128 @@ function App() {
               </section>
 
               <section className="control-section">
-                <div className="section-heading dimensions-section-heading">
-                  <span>Sink Dimensions (Overall)</span>
-                  <strong>+$150</strong>
+                <div className="section-heading">
+                  <span>Bowl Shape</span>
                 </div>
-                <SliderRow label="Length" max={maximumOverallWidth} min={fixedSinkWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
-                <SliderRow label="Width" max={maximumOverallDepth} min={fixedSinkDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
-                <SliderRow label="Height" max={500} min={80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
+                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                  <div
+                    className="segmented-indicator"
+                    style={{
+                      transform: `translateX(${shapes.indexOf(selectedShape) * 100}%)`,
+                      width: "50%",
+                    }}
+                  />
+                  {shapes.map((shape) => (
+                    <button
+                      className={selectedShape === shape ? "active" : ""}
+                      key={shape}
+                      onClick={() => handleShapeChange(shape)}
+                      type="button"
+                      title={shape.charAt(0).toUpperCase() + shape.slice(1)}
+                    >
+                      {shape === "rectangle" && (
+                        <svg viewBox="0 0 24 24" width="20" height="20" style={{ display: "block", margin: "auto" }}>
+                          <rect x="3" y="6" width="18" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                      )}
+                      {shape === "oval" && (
+                        <svg viewBox="0 0 24 24" width="20" height="20" style={{ display: "block", margin: "auto" }}>
+                          <ellipse cx="12" cy="12" rx="9" ry="6" fill="none" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
               </section>
 
-              <section className="control-section side-spacing-section">
-                <span className="section-label">Side Spacing</span>
-                <SpacingDiagram
-                  left={Number(config.dimensions.L2 ?? 0)}
-                  right={Number(config.dimensions.L3 ?? 0)}
-                  rear={Number(config.dimensions.D2 ?? 0)}
-                />
-                <div className="offset-grid">
-                  <OffsetControl label="Left" value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
-                  <OffsetControl label="Right" value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
-                  <OffsetControl label="Front" value={Number(config.dimensions.D3 ?? 0)} onChange={(value) => updateDimension("D3", value)} />
-                  <OffsetControl label="Rear" value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
+              <section className="control-section">
+                <div className="section-heading">
+                  <span>Bowl Size</span>
+                  <strong>{selectedShape === "oval" ? "Not Applicable" : (sizePrice > 0 ? `+$${sizePrice}` : "Free")}</strong>
+                </div>
+                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+                  {selectedShape !== "oval" && (
+                    <div
+                      className="segmented-indicator"
+                      style={{
+                        transform: `translateX(${sizes.indexOf(selectedSize) * 100}%)`,
+                        width: "20%",
+                      }}
+                    />
+                  )}
+                  {sizes.map((size) => {
+                    const isDisabled = isSizeDisabled(selectedShape, size);
+                    return (
+                      <Tooltip key={size} label={isDisabled ? "Not Available" : (sizePrices[size] > 0 ? `+$${sizePrices[size]}` : "Free")}>
+                        <button
+                          className={`${selectedSize === size && selectedShape !== "oval" ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
+                          onClick={() => !isDisabled && handleSizeChange(size)}
+                          disabled={isDisabled}
+                          type="button"
+                        >
+                          {size}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#737783", fontWeight: 500 }}>
+                  {selectedShape === "oval" ? "Bowl Size Is Fixed For Oval Shape" : "Bowl Dimensions Are Fixed"}
+                </div>
+              </section>
+
+              <section className="control-section">
+                <div className="section-heading">
+                  <span>Bowl Model</span>
+                </div>
+                <div className="bowl-model-card-grid">
+                  {filteredBowls.map((bowl) => (
+                    <Card
+                      key={bowl.id}
+                      image={bowl.image}
+                      label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
+                      selected={config.bowl?.id === bowl.id}
+                      onClick={() => updateBowl(bowl)}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              <section className="control-section">
+                <div className="section-heading dimensions-section-heading">
+                  <span>Sink Dimensions</span>
+                  <strong>+$150</strong>
+                </div>
+
+                {/* Length Block */}
+                <div style={{ display: "grid", gap: "16px", marginTop: "16px" }}>
+                  <SliderRow label="Width" max={maximumOverallWidth} min={fixedSinkWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
+                  
+                  <div className="offset-grid">
+                    <OffsetControl label="Left" value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
+                    <OffsetControl label="Right" value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div style={{ height: "1px", background: "#e4e4e4", margin: "20px 0" }} />
+
+                {/* Width Block */}
+                <div style={{ display: "grid", gap: "16px" }}>
+                  <SliderRow label="Depth" max={maximumOverallDepth} min={fixedSinkDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
+                  
+                  <div className="offset-grid">
+                    <OffsetControl label="Front" value={Number(config.dimensions.D3 ?? 0)} onChange={(value) => updateDimension("D3", value)} />
+                    <OffsetControl label="Rear" value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div style={{ height: "1px", background: "#e4e4e4", margin: "20px 0" }} />
+
+                {/* Height Block */}
+                <div>
+                  <SliderRow label="Height" max={500} min={80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
                 </div>
               </section>
 
@@ -623,6 +795,8 @@ function App() {
 
             <div className="summary-items">
               <SummaryItem label="Undermount Bowl" onEdit={() => editSummarySection("build")} price={350} />
+              <SummaryItem label={`Bowl Shape: ${selectedShape.charAt(0).toUpperCase() + selectedShape.slice(1)}`} onEdit={() => editSummarySection("build")} price={0} />
+              <SummaryItem label={`Bowl Size: ${selectedSize}`} onEdit={() => editSummarySection("build")} price={sizePrice} />
               <SummaryItem label={`Number of Bowls: ${bowlCount}`} onEdit={() => editSummarySection("build")} price={quantityPrice} />
               <SummaryItem label="Dimensions (Overall)" onEdit={() => editSummarySection("build")} price={150}>
                 <span className="summary-dimensions">{Math.round(Number(dims.L ?? 0) / 25.4)}in <b>x</b> {Math.round(Number(dims.D ?? 0) / 25.4)}in <b>x</b> {Math.round(Number(dims.H ?? 0) / 25.4)}in</span>

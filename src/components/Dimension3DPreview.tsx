@@ -513,25 +513,33 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
         )}
         <Canvas camera={{ position: [4.7, 4.1, 5.4], fov: 38 }} shadows>
           <ambientLight intensity={lightSettings.ambientIntensity} />
-                    <directionalLight
-            castShadow
-            intensity={lightSettings.keyIntensity}
-            position={[lightSettings.keyX, lightSettings.keyY, lightSettings.keyZ]}
-            shadow-bias={lightSettings.shadowBias}
-            shadow-camera-bottom={-lightSettings.shadowCameraSize}
-            shadow-camera-left={-lightSettings.shadowCameraSize}
-            shadow-camera-right={lightSettings.shadowCameraSize}
-            shadow-camera-top={lightSettings.shadowCameraSize}
-            shadow-intensity={lightSettings.shadowOpacity}
-            shadow-mapSize={[lightSettings.shadowMapSize, lightSettings.shadowMapSize]}
-            shadow-normalBias={lightSettings.shadowNormalBias}
-            shadow-radius={lightSettings.shadowRadius}
-          />
-          <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} config={config} />
-          <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[12, 9]} />
-            <shadowMaterial opacity={1} />
-          </mesh>
+          {(() => {
+            const sceneLength = toScene(length);
+            const cameraSize = Math.max(lightSettings.shadowCameraSize, sceneLength * 1.25);
+            return (
+              <>
+                <directionalLight
+                  castShadow
+                  intensity={lightSettings.keyIntensity}
+                  position={[lightSettings.keyX, lightSettings.keyY, lightSettings.keyZ]}
+                  shadow-bias={lightSettings.shadowBias}
+                  shadow-camera-bottom={-cameraSize}
+                  shadow-camera-left={-cameraSize}
+                  shadow-camera-right={cameraSize}
+                  shadow-camera-top={cameraSize}
+                  shadow-intensity={lightSettings.shadowOpacity}
+                  shadow-mapSize={[lightSettings.shadowMapSize, lightSettings.shadowMapSize]}
+                  shadow-normalBias={lightSettings.shadowNormalBias}
+                  shadow-radius={lightSettings.shadowRadius}
+                />
+                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} config={config} />
+                <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                  <planeGeometry args={[Math.max(20, sceneLength * 2.5), 15]} />
+                  <shadowMaterial opacity={1} />
+                </mesh>
+              </>
+            );
+          })()}
           <Environment files="/environment/alte_veste_station_2k.hdr" environmentIntensity={0.4} />
           <EffectComposer enableNormalPass multisampling={0}>
             <SSAO
