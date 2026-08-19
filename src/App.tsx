@@ -7,7 +7,7 @@ import { mergedDimensions } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
 
-const selectedStartBowl = bowlOptions[0];
+const selectedStartBowl = bowlOptions.find((bowl) => bowl.id === "UB-04-M") ?? bowlOptions[0];
 
 const initialConfig: SinkConfiguration = {
   bowl: selectedStartBowl,
@@ -185,7 +185,7 @@ function App() {
   const [showBuildSummary, setShowBuildSummary] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [bowlFinish, setBowlFinish] = useState<BowlFinish>("glossy");
-  const [bowlColor, setBowlColor] = useState<BowlColor>("white");
+  const [bowlColor, setBowlColor] = useState<BowlColor>("gray");
   const [customBowlColor, setCustomBowlColor] = useState("#e6e6e6");
   const [drainFinish, setDrainFinish] = useState<DrainFinish>("chrome");
   const [, setHistoryRevision] = useState(0);
