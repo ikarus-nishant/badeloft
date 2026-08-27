@@ -17,6 +17,8 @@ export interface BowlOption {
     length: number;
     depth: number;
   };
+  basePrice?: number;
+  colorPrice?: number;
 }
 
 export interface SinkDimensions {

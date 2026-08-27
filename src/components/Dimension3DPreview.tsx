@@ -1,8 +1,8 @@
-import { Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { Environment, Html, OrbitControls, useGLTF } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Box3, BoxGeometry, type BufferGeometry, Mesh, MeshStandardMaterial, type Object3D, Vector3 } from "three";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
@@ -22,6 +22,7 @@ interface Dimension3DPreviewProps {
   bowlFinish?: BowlFinish;
   config: SinkConfiguration;
   drainFinish?: DrainFinish;
+  showDimensions?: boolean;
 }
 
 interface LightSettings {
@@ -48,6 +49,7 @@ type LightSettingKey = keyof LightSettings;
 interface SinkModelProps {
   appearance: SinkAppearance;
   config: SinkConfiguration;
+  showDimensions: boolean;
 }
 
 interface BasinModelProps extends SinkAppearance {
@@ -332,7 +334,95 @@ function BasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sinkH
   );
 }
 
-function SinkModel({ appearance, config }: SinkModelProps) {
+function Line({ start, end, color = "#1a1a1a" }: { start: [number, number, number]; end: [number, number, number]; color?: string }) {
+  const points = useMemo(() => [new Vector3(...start), new Vector3(...end)], [start, end]);
+  const geoRef = useRef<BufferGeometry>(null);
+
+  useEffect(() => {
+    if (geoRef.current) {
+      geoRef.current.setFromPoints(points);
+    }
+  }, [points]);
+
+  return (
+    <line>
+      <bufferGeometry ref={geoRef} attach="geometry" />
+      <lineBasicMaterial attach="material" color={color} linewidth={2} />
+    </line>
+  );
+}
+
+interface MeasurementsProps {
+  show: boolean;
+  config: SinkConfiguration;
+}
+
+function Measurements({ show, config }: MeasurementsProps) {
+  if (!show) return null;
+
+  const dims = mergedDimensions(config);
+  const length = Number(dims.L || 1000);
+  const depth = Number(dims.D || 500);
+  const height = Number(dims.H || 150);
+
+  const sceneLength = toScene(length);
+  const sceneDepth = toScene(depth);
+  const sceneHeight = Math.max(0.42, toScene(height));
+
+  const lengthInches = (length / 25.4).toFixed(1);
+  const depthInches = (depth / 25.4).toFixed(1);
+  const heightInches = (height / 25.4).toFixed(1);
+
+  const color = "#636363"; // Elegant slate gray for measurement lines
+
+  return (
+    <group>
+      {/* 1. Width (Length) Measurements */}
+      <group>
+        {/* Main Line */}
+        <Line start={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2]} end={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2]} color={color} />
+        {/* Left Tick */}
+        <Line start={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 - 0.07]} end={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 + 0.07]} color={color} />
+        {/* Right Tick */}
+        <Line start={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 - 0.07]} end={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 + 0.07]} color={color} />
+        {/* Label */}
+        <Html position={[0, -0.05, sceneDepth / 2 + 0.2]} center>
+          <div className="measurement-label">{lengthInches} in</div>
+        </Html>
+      </group>
+
+      {/* 2. Depth Measurements */}
+      <group>
+        {/* Main Line */}
+        <Line start={[sceneLength / 2 + 0.2, -0.05, -sceneDepth / 2]} end={[sceneLength / 2 + 0.2, -0.05, sceneDepth / 2]} color={color} />
+        {/* Back Tick */}
+        <Line start={[sceneLength / 2 + 0.12, -0.05, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, -0.05, -sceneDepth / 2]} color={color} />
+        {/* Front Tick */}
+        <Line start={[sceneLength / 2 + 0.12, -0.05, sceneDepth / 2]} end={[sceneLength / 2 + 0.28, -0.05, sceneDepth / 2]} color={color} />
+        {/* Label */}
+        <Html position={[sceneLength / 2 + 0.2, -0.05, 0]} center>
+          <div className="measurement-label">{depthInches} in</div>
+        </Html>
+      </group>
+
+      {/* 3. Height Measurements */}
+      <group>
+        {/* Main Line */}
+        <Line start={[sceneLength / 2 + 0.2, 0, -sceneDepth / 2]} end={[sceneLength / 2 + 0.2, sceneHeight, -sceneDepth / 2]} color={color} />
+        {/* Bottom Tick */}
+        <Line start={[sceneLength / 2 + 0.12, 0, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, 0, -sceneDepth / 2]} color={color} />
+        {/* Top Tick */}
+        <Line start={[sceneLength / 2 + 0.12, sceneHeight, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, sceneHeight, -sceneDepth / 2]} color={color} />
+        {/* Label */}
+        <Html position={[sceneLength / 2 + 0.2, sceneHeight / 2, -sceneDepth / 2]} center>
+          <div className="measurement-label">{heightInches} in</div>
+        </Html>
+      </group>
+    </group>
+  );
+}
+
+function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
   const dims = mergedDimensions(config);
   const quantity = config.bowlQuantity ?? "single";
   const count = quantity === "triple" ? 3 : quantity === "double" ? 2 : 1;
@@ -388,6 +478,7 @@ function SinkModel({ appearance, config }: SinkModelProps) {
           z={bowl.z}
         />
       ))}
+      <Measurements show={showDimensions} config={config} />
     </group>
   );
 }
@@ -426,7 +517,7 @@ function LightControl({ label, max, min, onChange, step, value }: LightControlPr
   );
 }
 
-export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy", config, drainFinish = "chrome" }: Dimension3DPreviewProps) {
+export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy", config, drainFinish = "chrome", showDimensions }: Dimension3DPreviewProps) {
   const dims = mergedDimensions(config);
   const length = Number(dims.L || 1000);
   const depth = Number(dims.D || 500);
@@ -447,7 +538,8 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
         <strong>{length} x {depth} x {height} mm</strong>
       </div>
       <div className="sink-viewport r3f-viewport">
-        <button
+        {/* slider button */}
+        {/* <button
           aria-expanded={debugOpen}
           aria-label="Open light settings"
           className="light-debug-toggle"
@@ -456,7 +548,7 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
           type="button"
         >
           <SlidersHorizontal aria-hidden="true" size={20} />
-        </button>
+        </button> */}
         {debugOpen && (
           <aside className="light-debug-panel" aria-label="Light settings">
             <header>
@@ -532,7 +624,7 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
                   shadow-normalBias={lightSettings.shadowNormalBias}
                   shadow-radius={lightSettings.shadowRadius}
                 />
-                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} config={config} />
+                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} config={config} showDimensions={!!showDimensions} />
                 <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                   <planeGeometry args={[Math.max(20, sceneLength * 2.5), 15]} />
                   <shadowMaterial opacity={1} />

@@ -1,4 +1,4 @@
-import { Bath, Box, Palette, Redo2, RefreshCw, Undo2, X } from "lucide-react";
+import { Bath, Box, Palette, Redo2, RefreshCw, Ruler, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
 import { bowlOptions } from "./data/bowlOptions";
@@ -55,9 +55,9 @@ const bowlColorOptions: Array<{ color: string; id: Exclude<BowlColor, "custom">;
 ];
 
 const drainFinishOptions: Array<{ id: DrainFinish; label: string; price: number }> = [
-  { id: "black", label: "Black", price: 0 },
-  { id: "glossy-white", label: "Glossy White", price: 0 },
-  { id: "matte-white", label: "Matte White", price: 0 },
+  { id: "black", label: "Black", price: 29 },
+  { id: "glossy-white", label: "Glossy White", price: 29 },
+  { id: "matte-white", label: "Matte White", price: 29 },
   { id: "chrome", label: "Chrome", price: 29 },
   { id: "brushed-nickel", label: "Brushed Nickel", price: 29 },
 ];
@@ -148,15 +148,15 @@ const bowlDetails: Record<string, { shape: BowlShape; size: BowlSize; displayNam
   "UB-03": { shape: "oval", size: "M", displayName: "03" },
   "UB-04-M": { shape: "rectangle", size: "M", displayName: "04-M" },
   "UB-04-L": { shape: "rectangle", size: "L", displayName: "04-L" },
-  "UB-04-RL": { shape: "rectangle", size: "M", displayName: "04-RL" },
-  "UB-04-LR": { shape: "rectangle", size: "M", displayName: "04-LR" },
+  "UB-04-RL": { shape: "rectangle", size: "L", displayName: "04-RL" },
+  "UB-04-LR": { shape: "rectangle", size: "L", displayName: "04-LR" },
   "UB-04-32": { shape: "rectangle", size: "L", displayName: "04-32" },
   "UB-04-40": { shape: "rectangle", size: "XL", displayName: "04-40" },
   "UB-04-XL": { shape: "rectangle", size: "XL", displayName: "04-XL" },
   "UB-04-XXL": { shape: "rectangle", size: "XXL", displayName: "04-XXL" },
   "UB-05-M": { shape: "rectangle", size: "M", displayName: "05-M" },
-  "UB-05-L": { shape: "oval", size: "L", displayName: "05-L" },
-  "UB-05-XL": { shape: "oval", size: "XL", displayName: "05-XL" },
+  "UB-05-L": { shape: "rectangle", size: "L", displayName: "05-L" },
+  "UB-05-XL": { shape: "rectangle", size: "XL", displayName: "05-XL" },
 };
 
 function getShapeAndSizeFromBowlId(bowlId: string): { shape: BowlShape; size: BowlSize } {
@@ -167,15 +167,26 @@ function getShapeAndSizeFromBowlId(bowlId: string): { shape: BowlShape; size: Bo
   return { shape: "rectangle", size: "M" };
 }
 
-const sizePrices: Record<BowlSize, number> = {
-  S: 0,
-  M: 70,
-  L: 140,
-  XL: 210,
-  XXL: 280,
-};
+type BowlType = "tilt" | "rectangle" | "round";
 
-const shapes: BowlShape[] = ["rectangle", "oval"];
+function getBowlTypeFromId(bowlId: string): BowlType {
+  if (bowlId.startsWith("UB-04-")) {
+    return "tilt";
+  }
+  const details = bowlDetails[bowlId];
+  if (details && details.shape === "oval") {
+    return "round";
+  }
+  return "rectangle";
+}
+
+function formatBowlSize(size: { length: number; depth: number; height: number }): string {
+  const l = (size.length / 25.4).toFixed(size.length === 827 ? 2 : 1);
+  const d = (size.depth / 25.4).toFixed(1);
+  const h = (size.height / 25.4).toFixed(1);
+  return `Size: ${l} x ${d} x ${h} In`;
+}
+
 const sizes: BowlSize[] = ["S", "M", "L", "XL", "XXL"];
 
 function App() {
@@ -188,6 +199,7 @@ function App() {
   const [bowlColor, setBowlColor] = useState<BowlColor>("white");
   const [customBowlColor, setCustomBowlColor] = useState("#e6e6e6");
   const [drainFinish, setDrainFinish] = useState<DrainFinish>("chrome");
+  const [showDimensions, setShowDimensions] = useState(false);
   const [, setHistoryRevision] = useState(0);
   const applyingHistory = useRef(false);
   const currentSnapshot = useMemo<HistorySnapshot>(() => ({
@@ -214,27 +226,61 @@ function App() {
     ? customBowlColor
     : bowlColorOptions.find((option) => option.id === bowlColor)?.color ?? "#f7f7f5";
   const selectedBowlColorLabel = bowlColor === "custom"
-    ? "Custom"
+    ? `Custom (${customBowlColor.toUpperCase()})`
     : bowlColorOptions.find((option) => option.id === bowlColor)?.label ?? "White";
   const selectedDrainFinish = drainFinishOptions.find((option) => option.id === drainFinish) ?? drainFinishOptions[0];
   const bowlId = config.bowl?.id ?? "UB-01";
+  const selectedBowlType = getBowlTypeFromId(bowlId);
   const { shape: selectedShape, size: selectedSize } = getShapeAndSizeFromBowlId(bowlId);
-  const sizePrice = selectedShape === "oval" ? 0 : sizePrices[selectedSize];
-  const quantityPrice = bowlCount * 140;
-  const buildTotal = 350 + quantityPrice + sizePrice + 150;
-  const total = buildTotal + selectedDrainFinish.price;
 
-  const getFilteredBowls = (shape: BowlShape, size: BowlSize) => {
-    if (shape === "oval") {
-      return bowlOptions.filter((b) => b.id === "UB-02" || b.id === "UB-03");
+  // Model-specific pricing variables
+  const baseBowlPrice = config.bowl?.basePrice ?? 340;
+  const colorSurchargePrice = (bowlColor === "black" || bowlColor === "gray") ? (config.bowl?.colorPrice ?? 100) : 0;
+  const drainCapPrice = selectedBowlType === "tilt" ? 0 : 29;
+  const installationPrice = config.mountingType === "wall_mounted" ? 100 : 150;
+
+  const modelBaseTotal = baseBowlPrice * bowlCount;
+  const colorChangeTotal = colorSurchargePrice * bowlCount;
+  const drainCapTotal = drainCapPrice * bowlCount;
+
+  const buildSubtotal = modelBaseTotal + installationPrice;
+  const finishSubtotal = colorChangeTotal + drainCapTotal;
+  const total = buildSubtotal + finishSubtotal;
+ 
+  const selectedDrainEdge: "left" | "rear" | "right" = bowlId === "UB-04-RL"
+    ? "left"
+    : (bowlId === "UB-04-LR" ? "right" : "rear");
+
+  const isDrainEdgeDisabled = (edge: "left" | "rear" | "right") => {
+    return false;
+  };
+
+  const getFilteredBowls = (type: BowlType, size: BowlSize, edge: "left" | "rear" | "right" = selectedDrainEdge) => {
+    if (type === "round") {
+      return bowlOptions.filter((b) => {
+        const details = bowlDetails[b.id];
+        return details && details.shape === "oval" && details.size === size;
+      });
+    }
+    if (type === "tilt") {
+      return bowlOptions.filter((b) => {
+        const details = bowlDetails[b.id];
+        if (!b.id.startsWith("UB-04-") || !details || details.size !== size) {
+          return false;
+        }
+        const itemEdge = b.id === "UB-04-RL"
+          ? "left"
+          : (b.id === "UB-04-LR" ? "right" : "rear");
+        return itemEdge === edge;
+      });
     }
     return bowlOptions.filter((b) => {
       const details = bowlDetails[b.id];
-      return details && details.shape === "rectangle" && details.size === size;
+      return details && details.shape === "rectangle" && !b.id.startsWith("UB-04-") && details.size === size;
     });
   };
 
-  const filteredBowls = getFilteredBowls(selectedShape, selectedSize);
+  const filteredBowls = getFilteredBowls(selectedBowlType, selectedSize, selectedDrainEdge);
 
   const updateBowlById = (id: string) => {
     const newBowl = bowlOptions.find((b) => b.id === id);
@@ -243,34 +289,51 @@ function App() {
     }
   };
 
-  const isSizeDisabled = (shape: BowlShape, size: BowlSize) => {
-    if (shape === "oval") {
-      return true;
-    }
-    if (shape === "rectangle") {
-      return size === "S";
-    }
-    return false;
+  const isSizeDisabled = (type: BowlType, size: BowlSize) => {
+    const edge = type === "tilt" ? selectedDrainEdge : "rear";
+    return getFilteredBowls(type, size, edge).length === 0;
   };
 
-  const handleShapeChange = (newShape: BowlShape) => {
+  const handleDrainEdgeChange = (edge: "left" | "rear" | "right") => {
     let targetSize = selectedSize;
-    if (newShape === "rectangle" && targetSize === "S") {
-      targetSize = "M";
+    if ((edge === "left" || edge === "right") && targetSize !== "L") {
+      targetSize = "L"; // Auto switch size to L
     }
-    const matching = getFilteredBowls(newShape, targetSize);
+    const matching = getFilteredBowls(selectedBowlType, targetSize, edge);
     if (matching.length > 0) {
-      const exists = matching.find((b) => b.id === config.bowl?.id);
-      updateBowl(exists || matching[0]);
+      updateBowl(matching[0]);
+    }
+  };
+
+  const handleTypeChange = (newType: BowlType) => {
+    let targetSize = selectedSize;
+    let matching = getFilteredBowls(newType, targetSize, "rear");
+    
+    if (matching.length === 0) {
+      const fallbackSizes: BowlSize[] = ["M", "L", "XL", "XXL", "S"];
+      for (const fs of fallbackSizes) {
+        matching = getFilteredBowls(newType, fs, "rear");
+        if (matching.length > 0) {
+          targetSize = fs;
+          break;
+        }
+      }
+    }
+    
+    if (matching.length > 0) {
+      updateBowl(matching[0]);
     }
   };
 
   const handleSizeChange = (newSize: BowlSize) => {
-    if (isSizeDisabled(selectedShape, newSize)) return;
-    const matching = getFilteredBowls(selectedShape, newSize);
+    if (isSizeDisabled(selectedBowlType, newSize)) return;
+    let targetEdge = selectedDrainEdge;
+    if (newSize !== "L" && targetEdge !== "rear") {
+      targetEdge = "rear";
+    }
+    const matching = getFilteredBowls(selectedBowlType, newSize, targetEdge);
     if (matching.length > 0) {
-      const exists = matching.find((b) => b.id === config.bowl?.id);
-      updateBowl(exists || matching[0]);
+      updateBowl(matching[0]);
     }
   };
 
@@ -427,7 +490,7 @@ function App() {
     setShowBuildSummary(false);
   };
 
-  const selectedSinkName = config.bowl?.name ?? "UB-01";
+  const selectedSinkName = bowlDetails[config.bowl?.id ?? ""]?.displayName ?? config.bowl?.name ?? "01";
   const productTitle = `Undermount Sink ${selectedSinkName}`;
 
   return (
@@ -437,7 +500,7 @@ function App() {
           <img src="/assets/poweredby-logo.png" alt="Powered by Ikarus Delta" />
         </div>
         <div className="stage-canvas">
-          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} />
+          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} showDimensions={showDimensions} />
         </div>
         <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
           <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
@@ -449,15 +512,27 @@ function App() {
           <button className="toolbar-icon" aria-label="Reset view" onClick={() => setViewerResetToken((token) => token + 1)} title="Reset view" type="button">
             <RefreshCw size={24} />
           </button>
+          {/*
           <button
             aria-label="Sink view selected"
             aria-pressed="true"
-            className="toolbar-icon toolbar-product"
+            className="toolbar-icon toolbar-product active"
             onClick={() => setViewerResetToken((token) => token + 1)}
             title="Sink view"
             type="button"
           >
             <Bath size={24} />
+          </button>
+          */}
+          <button
+            aria-label="Toggle dimensions"
+            aria-pressed={showDimensions}
+            className={`toolbar-icon toolbar-product ${showDimensions ? "active" : ""}`}
+            onClick={() => setShowDimensions(!showDimensions)}
+            title="Toggle dimensions"
+            type="button"
+          >
+            <Ruler size={24} />
           </button>
           <button className="toolbar-ar" disabled title="AR preview is not available in this prototype" type="button">
             <Box size={21} />
@@ -477,33 +552,148 @@ function App() {
             <>
               <section className="control-section">
                 <div className="section-heading">
-                  <span>Sink Type</span>
-                  <strong>{config.mountingType === "wall_mounted" ? "Wall Mounted" : "Countertop"} · $350</strong>
+                  <span>Installation</span>
+                  <strong>{config.mountingType === "wall_mounted" ? "+$100" : "+$150"}</strong>
                 </div>
-                <div className="sink-type-card-grid">
-                  <Tooltip label="+$350">
-                    <Card
-                      image="/assets/wall-mounted.png"
-                      label="Wall Mounted"
-                      selected={config.mountingType === "wall_mounted"}
-                      onClick={() => updateMountingType("wall_mounted")}
-                    />
-                  </Tooltip>
-                  <Tooltip label="+$350">
-                    <Card
-                      image="/assets/countertop.png"
-                      label="Countertop"
-                      selected={config.mountingType === "countertop"}
-                      onClick={() => updateMountingType("countertop")}
-                    />
-                  </Tooltip>
+                <div className="mounting-card-grid">
+                  <button
+                    className={`mounting-card ${config.mountingType === "wall_mounted" ? "selected" : ""}`}
+                    onClick={() => updateMountingType("wall_mounted")}
+                    type="button"
+                  >
+                    <span className="mounting-card-title">Wall mounted</span>
+                    <span className="mounting-card-desc">Floats On A Concealed Bracket, Vanity-Free</span>
+                  </button>
+                  <button
+                    className={`mounting-card ${config.mountingType === "countertop" ? "selected" : ""}`}
+                    onClick={() => updateMountingType("countertop")}
+                    type="button"
+                  >
+                    <span className="mounting-card-title">Countertop</span>
+                    <span className="mounting-card-desc">Rests On Your Existing Vanity Or Counter</span>
+                  </button>
+                </div>
+              </section>
+
+              <section className="control-section">
+                <div className="section-heading">
+                  <span>Bowl Type</span>
+                </div>
+                <div className="bowl-type-image-grid">
+                  {(["tilt", "rectangle", "round"] as const).map((type) => {
+                    const typeDisplayNames = {
+                      tilt: "Ramp",
+                      rectangle: "Trough",
+                      round: "Oval",
+                    };
+                    return (
+                      <button
+                        className={`bowl-type-image-btn ${selectedBowlType === type ? "active" : ""}`}
+                        key={type}
+                        onClick={() => handleTypeChange(type)}
+                        type="button"
+                        title={typeDisplayNames[type]}
+                      >
+                        <img src={`/assets/${type}${selectedBowlType === type ? "_active" : ""}.webp`} alt={typeDisplayNames[type]} />
+                      </button>
+                    );
+                  })}
+                </div>
+ 
+                {selectedBowlType === "tilt" && (
+                  <div className="drain-edge-sub-section" style={{ marginTop: "24px" }}>
+                    <div className="section-heading">
+                      <span>Drain Edge</span>
+                    </div>
+                    <div className="segmented-control" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                      <div
+                        className="segmented-indicator"
+                        style={{
+                          transform: `translateX(${(["left", "rear", "right"] as const).indexOf(selectedDrainEdge) * 100}%)`,
+                          width: "33.333%",
+                        }}
+                      />
+                      {(["left", "rear", "right"] as const).map((edge) => {
+                        const isDisabled = isDrainEdgeDisabled(edge);
+                        const label = edge.charAt(0).toUpperCase() + edge.slice(1);
+                        return (
+                          <Tooltip key={edge} label={isDisabled ? "Only Available on Size L" : ""}>
+                            <button
+                              className={`${selectedDrainEdge === edge ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
+                              onClick={() => !isDisabled && handleDrainEdgeChange(edge)}
+                              disabled={isDisabled}
+                              type="button"
+                            >
+                              {label}
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+ 
+              <section className="control-section">
+                <div className="section-heading">
+                  <span>Bowl Size</span>
+                </div>
+                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+                  <div
+                    className="segmented-indicator"
+                    style={{
+                      transform: `translateX(${sizes.indexOf(selectedSize) * 100}%)`,
+                      width: "20%",
+                    }}
+                  />
+                  {sizes.map((size) => {
+                    const isDisabled = isSizeDisabled(selectedBowlType, size);
+                    return (
+                      <Tooltip key={size} label={isDisabled ? "Not Available" : ""}>
+                        <button
+                          className={`${selectedSize === size ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
+                          onClick={() => !isDisabled && handleSizeChange(size)}
+                          disabled={isDisabled}
+                          type="button"
+                        >
+                          {size}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: "10px", fontSize: "13px", color: "#737783", fontWeight: 500 }}>
+                  Bowl Dimensions Are Fixed
+                </div>
+              </section>
+ 
+              <section className="control-section">
+                <div className="section-heading">
+                  <span>Bowl Model</span>
+                  <strong>${config.bowl?.basePrice ?? 340}</strong>
+                </div>
+                <div className="bowl-model-card-grid">
+                  {filteredBowls.map((bowl) => (
+                    <Tooltip key={bowl.id} label={`$${bowl.basePrice}`}>
+                      <Card
+                        image={bowl.image}
+                        label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
+                        selected={config.bowl?.id === bowl.id}
+                        onClick={() => updateBowl(bowl)}
+                      >
+                        <div className="reusable-card-subtitle">
+                          {formatBowlSize(bowl.size)}
+                        </div>
+                      </Card>
+                    </Tooltip>
+                  ))}
                 </div>
               </section>
 
               <section className="control-section">
                 <div className="section-heading">
                   <span>Number Of Bowls</span>
-                  <strong>{quantityOptions.find((item) => item.quantity === config.bowlQuantity)?.price}</strong>
+                  <strong>{`x${bowlCount}`}</strong>
                 </div>
                 <div className="segmented-control">
                   <div
@@ -513,17 +703,22 @@ function App() {
                       width: "33.333%",
                     }}
                   />
-                  {quantityOptions.map((item) => (
-                    <Tooltip key={item.quantity} label={item.price}>
-                      <button
-                        className={config.bowlQuantity === item.quantity ? "active" : ""}
-                        onClick={() => updateQuantity(item.quantity)}
-                        type="button"
-                      >
-                        {item.label}
-                      </button>
-                    </Tooltip>
-                  ))}
+                  {quantityOptions.map((item) => {
+                    const qtyMultiplier = item.quantity === "single" ? 1 : (item.quantity === "double" ? 2 : 3);
+                    const labelText = `x${qtyMultiplier}`;
+
+                    return (
+                      <Tooltip key={item.quantity} label={labelText}>
+                        <button
+                          className={config.bowlQuantity === item.quantity ? "active" : ""}
+                          onClick={() => updateQuantity(item.quantity)}
+                          type="button"
+                        >
+                          {item.label}
+                        </button>
+                      </Tooltip>
+                    );
+                  })}
                 </div>
 
                 {bowlCount > 1 && (
@@ -540,97 +735,8 @@ function App() {
               </section>
 
               <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Shape</span>
-                </div>
-                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-                  <div
-                    className="segmented-indicator"
-                    style={{
-                      transform: `translateX(${shapes.indexOf(selectedShape) * 100}%)`,
-                      width: "50%",
-                    }}
-                  />
-                  {shapes.map((shape) => (
-                    <button
-                      className={selectedShape === shape ? "active" : ""}
-                      key={shape}
-                      onClick={() => handleShapeChange(shape)}
-                      type="button"
-                      title={shape.charAt(0).toUpperCase() + shape.slice(1)}
-                    >
-                      {shape === "rectangle" && (
-                        <svg viewBox="0 0 24 24" width="20" height="20" style={{ display: "block", margin: "auto" }}>
-                          <rect x="3" y="6" width="18" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" />
-                        </svg>
-                      )}
-                      {shape === "oval" && (
-                        <svg viewBox="0 0 24 24" width="20" height="20" style={{ display: "block", margin: "auto" }}>
-                          <ellipse cx="12" cy="12" rx="9" ry="6" fill="none" stroke="currentColor" strokeWidth="2" />
-                        </svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Size</span>
-                  <strong>{selectedShape === "oval" ? "Not Applicable" : (sizePrice > 0 ? `+$${sizePrice}` : "Free")}</strong>
-                </div>
-                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-                  {selectedShape !== "oval" && (
-                    <div
-                      className="segmented-indicator"
-                      style={{
-                        transform: `translateX(${sizes.indexOf(selectedSize) * 100}%)`,
-                        width: "20%",
-                      }}
-                    />
-                  )}
-                  {sizes.map((size) => {
-                    const isDisabled = isSizeDisabled(selectedShape, size);
-                    return (
-                      <Tooltip key={size} label={isDisabled ? "Not Available" : (sizePrices[size] > 0 ? `+$${sizePrices[size]}` : "Free")}>
-                        <button
-                          className={`${selectedSize === size && selectedShape !== "oval" ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
-                          onClick={() => !isDisabled && handleSizeChange(size)}
-                          disabled={isDisabled}
-                          type="button"
-                        >
-                          {size}
-                        </button>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: "10px", fontSize: "13px", color: "#737783", fontWeight: 500 }}>
-                  {selectedShape === "oval" ? "Bowl Size Is Fixed For Oval Shape" : "Bowl Dimensions Are Fixed"}
-                </div>
-              </section>
-
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Model</span>
-                </div>
-                <div className="bowl-model-card-grid">
-                  {filteredBowls.map((bowl) => (
-                    <Card
-                      key={bowl.id}
-                      image={bowl.image}
-                      label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
-                      selected={config.bowl?.id === bowl.id}
-                      onClick={() => updateBowl(bowl)}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <section className="control-section">
                 <div className="section-heading dimensions-section-heading">
                   <span>Sink Dimensions</span>
-                  <strong>+$150</strong>
                 </div>
 
                 {/* Length Block */}
@@ -644,7 +750,7 @@ function App() {
                 </div>
 
                 {/* Divider */}
-                <div style={{ height: "1px", background: "#e4e4e4", margin: "20px 0" }} />
+                <div className="mid-divider" />
 
                 {/* Width Block */}
                 <div style={{ display: "grid", gap: "16px" }}>
@@ -657,7 +763,7 @@ function App() {
                 </div>
 
                 {/* Divider */}
-                <div style={{ height: "1px", background: "#e4e4e4", margin: "20px 0" }} />
+                <div className="mid-divider" />
 
                 {/* Height Block */}
                 <div>
@@ -669,19 +775,13 @@ function App() {
           ) : (
             <div className="finish-menu">
               <section className="finish-section">
-                <span className="section-label">Bowl Finish</span>
-                <div className="finish-segmented" role="group" aria-label="Bowl finish">
-                  <div
-                    className="segmented-indicator"
-                    style={{
-                      transform: `translateX(${selectedFinishIndex * 100}%)`,
-                      width: "50%",
-                    }}
-                  />
+                <div className="section-heading">
+                  <span>Surface Finish</span>
+                </div>
+                <div className="finish-card-grid">
                   {(["glossy", "matte"] as const).map((finish) => (
                     <button
-                      aria-pressed={bowlFinish === finish}
-                      className={bowlFinish === finish ? "active" : ""}
+                      className={`finish-card ${bowlFinish === finish ? "selected" : ""}`}
                       key={finish}
                       onClick={() => setBowlFinish(finish)}
                       type="button"
@@ -694,71 +794,68 @@ function App() {
 
               <section className="finish-section">
                 <div className="section-heading">
-                  <span>Bowl Color</span>
-                  <strong>{selectedBowlColorLabel}</strong>
+                  <span>Color</span>
+                  <strong style={{ color: "#a38460" }}>
+                    {bowlColor === "white" || bowlColor === "custom"
+                      ? "Free"
+                      : `+$${config.bowl?.colorPrice ?? 100}`}
+                  </strong>
                 </div>
-                <div className="finish-swatch-grid">
+                <div className="finish-card-grid">
                   {bowlColorOptions.map((option) => (
                     <button
-                      aria-pressed={bowlColor === option.id}
-                      className={`finish-option ${bowlColor === option.id ? "selected" : ""}`}
+                      className={`color-card color-${option.id} ${bowlColor === option.id ? "selected" : ""}`}
                       key={option.id}
                       onClick={() => setBowlColor(option.id)}
                       type="button"
                     >
-                      <span className={`finish-sample bowl-color-${option.id}`} />
-                      <span>{option.label}</span>
+                      {option.label}
                     </button>
                   ))}
-                  <label className={`finish-option custom-color-option ${bowlColor === "custom" ? "selected" : ""}`}>
-                    <span className="finish-sample custom-color-sample">
-                      <input
-                        aria-label="Choose a custom bowl color"
-                        onChange={(event) => {
-                          setCustomBowlColor(event.target.value);
-                          setBowlColor("custom");
-                        }}
-                        type="color"
-                        value={customBowlColor}
-                      />
-                      <ColorWheelIcon />
-                    </span>
-                    <span>Custom</span>
+                  <label className={`color-card custom-color-card ${bowlColor === "custom" ? "selected" : ""}`} style={{ position: "relative" }}>
+                    <input
+                      aria-label="Choose a custom bowl color"
+                      onChange={(event) => {
+                        setCustomBowlColor(event.target.value);
+                        setBowlColor("custom");
+                      }}
+                      type="color"
+                      value={customBowlColor}
+                      style={{
+                        position: "absolute",
+                        opacity: 0,
+                        width: "100%",
+                        height: "100%",
+                        cursor: "pointer"
+                      }}
+                    />
+                    <span style={{ marginRight: "6px" }}>Custom</span>
+                    <ColorWheelIcon />
                   </label>
                 </div>
               </section>
 
-              <section className="finish-section">
-                <div className="section-heading">
-                  <span>Drain Cap Finish</span>
-                  <strong>{selectedDrainFinish.label}{selectedDrainFinish.price > 0 ? ` · +$${selectedDrainFinish.price}` : ""}</strong>
-                </div>
-                <div className="finish-swatch-grid drain-finish-grid">
-                  {drainFinishOptions.map((option) => {
-                    const buttonElement = (
-                      <button
-                        aria-pressed={drainFinish === option.id}
-                        className={`finish-option ${drainFinish === option.id ? "selected" : ""}`}
-                        onClick={() => setDrainFinish(option.id)}
-                        type="button"
-                      >
-                        <span className={`finish-sample drain-${option.id}`} />
-                        <span>{option.label}</span>
-                      </button>
-                    );
-
-                    return option.price > 0 ? (
-                      <Tooltip key={option.id} label={`+$${option.price}`}>
-                        {buttonElement}
+              {selectedBowlType !== "tilt" && (
+                <section className="finish-section">
+                  <div className="section-heading">
+                    <span>Drain Cap Finish</span>
+                    <strong style={{ color: "#a38460" }}>+$29</strong>
+                  </div>
+                  <div className="finish-card-grid">
+                    {drainFinishOptions.map((option) => (
+                      <Tooltip key={option.id} label="+$29">
+                        <button
+                          className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
+                          onClick={() => setDrainFinish(option.id)}
+                          type="button"
+                        >
+                          {option.label} +$29
+                        </button>
                       </Tooltip>
-                    ) : (
-                      <div key={option.id} className="finish-option-wrapper">
-                        {buttonElement}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>
@@ -793,36 +890,88 @@ function App() {
               <strong>{productTitle}</strong>
             </div>
 
-            <div className="summary-items">
-              <SummaryItem label="Undermount Bowl" onEdit={() => editSummarySection("build")} price={350} />
-              <SummaryItem label={`Bowl Shape: ${selectedShape.charAt(0).toUpperCase() + selectedShape.slice(1)}`} onEdit={() => editSummarySection("build")} price={0} />
-              <SummaryItem label={`Bowl Size: ${selectedSize}`} onEdit={() => editSummarySection("build")} price={sizePrice} />
-              <SummaryItem label={`Number of Bowls: ${bowlCount}`} onEdit={() => editSummarySection("build")} price={quantityPrice} />
-              <SummaryItem label="Dimensions (Overall)" onEdit={() => editSummarySection("build")} price={150}>
-                <span className="summary-dimensions">{Math.round(Number(dims.L ?? 0) / 25.4)}in <b>x</b> {Math.round(Number(dims.D ?? 0) / 25.4)}in <b>x</b> {Math.round(Number(dims.H ?? 0) / 25.4)}in</span>
-              </SummaryItem>
-              <SummaryItem label={`${selectedBowlColorLabel} ${bowlFinish} Bowl`} onEdit={() => editSummarySection("finish")} price={0} />
-              <SummaryItem label={`${selectedDrainFinish.label} Drain Cap`} onEdit={() => editSummarySection("finish")} price={selectedDrainFinish.price} />
-            </div>
+             <div className="summary-items">
+               {/* Build Card */}
+               <div className="summary-group-card">
+                 <div className="summary-group-header">
+                   <strong>Build Subtotal</strong>
+                   <span>${buildSubtotal}</span>
+                 </div>
+                 <div className="summary-group-divider" />
+                 <ul className="summary-group-details">
+                   <li>
+                     <span>Bowl Model:</span>
+                     <strong>{selectedSinkName}</strong>
+                   </li>
+                   <li>
+                     <span>Bowl Shape:</span>
+                     <strong>{selectedBowlType === "tilt" ? "Ramp" : (selectedBowlType === "round" ? "Oval" : "Trough")}</strong>
+                   </li>
+                   <li>
+                     <span>Bowl Size:</span>
+                     <strong>{selectedSize}</strong>
+                   </li>
+                   <li>
+                     <span>Number of Bowls:</span>
+                     <strong>{bowlCount}</strong>
+                   </li>
+                   <li>
+                     <span>Dimensions:</span>
+                     <strong>
+                       {Math.round(Number(dims.L ?? 0) / 25.4)}in x {Math.round(Number(dims.D ?? 0) / 25.4)}in x {Math.round(Number(dims.H ?? 0) / 25.4)}in
+                     </strong>
+                   </li>
+                   <li>
+                     <span>Installation:</span>
+                     <strong>{config.mountingType === "wall_mounted" ? "Wall Mounted" : "Countertop"}</strong>
+                   </li>
+                 </ul>
+               </div>
 
-            <div className="summary-spacer" />
+               {/* Finish Card */}
+               <div className="summary-group-card">
+                 <div className="summary-group-header">
+                   <strong>Finish Subtotal</strong>
+                   <span>${finishSubtotal}</span>
+                 </div>
+                 <div className="summary-group-divider" />
+                 <ul className="summary-group-details">
+                   <li>
+                     <span>Bowl Color:</span>
+                     <strong>{selectedBowlColorLabel}</strong>
+                   </li>
+                   <li>
+                     <span>Bowl Finish:</span>
+                     <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
+                   </li>
+                   {selectedBowlType !== "tilt" && (
+                     <li>
+                       <span>Drain Cap:</span>
+                       <strong>{selectedDrainFinish.label}</strong>
+                     </li>
+                   )}
+                 </ul>
+               </div>
+             </div>
 
-            <label className="summary-instructions">
-              <span>Special Instructions</span>
-              <textarea
-                onChange={(event) => setSpecialInstructions(event.target.value)}
-                placeholder="I would like to get my sink in a custom red wine finish"
-                value={specialInstructions}
-              />
-            </label>
-          </div>
+             <div className="summary-spacer" />
 
-          <div className="summary-footer">
-            <div className="summary-totals">
-              <div><span>Build</span><strong>${buildTotal}</strong></div>
-              <div><span>Finish</span><strong>${selectedDrainFinish.price}</strong></div>
-              <div className="summary-grand-total"><span>Total</span><strong>${total}</strong></div>
-            </div>
+             <label className="summary-instructions">
+               <span>Special Instructions</span>
+               <textarea
+                 onChange={(event) => setSpecialInstructions(event.target.value)}
+                 placeholder="I would like to get my sink in a custom red wine finish"
+                 value={specialInstructions}
+               />
+             </label>
+           </div>
+
+           <div className="summary-footer">
+             <div className="summary-totals">
+               <div><span>Build</span><strong>${buildSubtotal}</strong></div>
+               <div><span>Finish</span><strong>${finishSubtotal}</strong></div>
+               <div className="summary-grand-total"><span>Total</span><strong>${total}</strong></div>
+             </div>
 
             <button className="summary-add-cart" type="button">Add to Cart</button>
           </div>
@@ -862,9 +1011,9 @@ interface SliderRowProps {
 }
 
 function SliderRow({ label, max, min, onChange, value }: SliderRowProps) {
-  const valInInches = Math.round(value / 25.4);
-  const minInInches = Math.round(min / 25.4);
-  const maxInInches = Math.round(max / 25.4);
+  const valInInches = Number((value / 25.4).toFixed(2));
+  const minInInches = Number((min / 25.4).toFixed(2));
+  const maxInInches = Number((max / 25.4).toFixed(2));
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const inchVal = Number(event.target.value);
@@ -880,13 +1029,13 @@ function SliderRow({ label, max, min, onChange, value }: SliderRowProps) {
   const sliderStyle = { "--range-progress": `${progress}%` } as CSSProperties;
 
   return (
-    <label className="slider-row">
-      <span>{label}</span>
-      <div>
-        <input max={maxInInches} min={minInInches} style={sliderStyle} type="range" value={sliderValue} onChange={handleSliderChange} />
+    <div className="slider-row">
+      <div className="slider-row-header">
+        <span>{label}</span>
         <NumericInput ariaLabel={`${label} in inches`} max={maxInInches} min={minInInches} onCommit={handleNumericCommit} suffix="in" value={valInInches} />
       </div>
-    </label>
+      <input max={maxInInches} min={minInInches} step="0.1" style={sliderStyle} type="range" value={sliderValue} onChange={handleSliderChange} />
+    </div>
   );
 }
 
@@ -897,7 +1046,7 @@ interface OffsetControlProps {
 }
 
 function OffsetControl({ label, onChange, value }: OffsetControlProps) {
-  const valInInches = Math.round(value / 25.4);
+  const valInInches = Number((value / 25.4).toFixed(2));
   const minInInches = 0;
   const maxInInches = 48; // 1200 mm / 25.4 is ~47.2, so 48in max is perfect!
 
@@ -915,25 +1064,28 @@ function OffsetControl({ label, onChange, value }: OffsetControlProps) {
   const sliderStyle = { "--range-progress": `${progress}%` } as CSSProperties;
 
   return (
-    <label className="offset-control">
-      <span>{label}</span>
+    <div className="offset-control">
+      <div className="offset-control-header">
+        <span>{label}</span>
+        <NumericInput
+          ariaLabel={`${label} offset in inches`}
+          max={maxInInches}
+          min={minInInches}
+          onCommit={handleNumericCommit}
+          suffix="in"
+          value={valInInches}
+        />
+      </div>
       <input
         max={maxInInches}
         min={minInInches}
+        step="0.1"
         style={sliderStyle}
         type="range"
         value={sliderValue}
         onChange={handleSliderChange}
       />
-      <NumericInput
-        ariaLabel={`${label} offset in inches`}
-        max={maxInInches}
-        min={minInInches}
-        onCommit={handleNumericCommit}
-        suffix="in"
-        value={valInInches}
-      />
-    </label>
+    </div>
   );
 }
 interface NumericInputProps {
@@ -946,21 +1098,21 @@ interface NumericInputProps {
 }
 
 function NumericInput({ ariaLabel, max, min, onCommit, suffix, value }: NumericInputProps) {
-  const [draft, setDraft] = useState(String(value));
+  const [draft, setDraft] = useState(value % 1 === 0 ? String(value) : value.toFixed(2));
 
   useEffect(() => {
-    setDraft(String(value));
+    setDraft(value % 1 === 0 ? String(value) : value.toFixed(2));
   }, [value]);
 
   const commit = () => {
     const parsed = Number(draft);
     if (draft.trim() === "" || !Number.isFinite(parsed)) {
-      setDraft(String(value));
+      setDraft(value % 1 === 0 ? String(value) : value.toFixed(2));
       return;
     }
 
     const nextValue = clamp(parsed, min, max);
-    setDraft(String(nextValue));
+    setDraft(nextValue % 1 === 0 ? String(nextValue) : nextValue.toFixed(2));
     onCommit(nextValue);
   };
 
@@ -969,7 +1121,7 @@ function NumericInput({ ariaLabel, max, min, onCommit, suffix, value }: NumericI
       <input
         aria-label={ariaLabel}
         className="number-box"
-        inputMode="numeric"
+        inputMode="decimal"
         max={max}
         min={min}
         onBlur={commit}
@@ -978,11 +1130,11 @@ function NumericInput({ ariaLabel, max, min, onCommit, suffix, value }: NumericI
         onKeyDown={(event) => {
           if (event.key === "Enter") event.currentTarget.blur();
           if (event.key === "Escape") {
-            setDraft(String(value));
+            setDraft(value % 1 === 0 ? String(value) : value.toFixed(2));
             event.currentTarget.blur();
           }
         }}
-        step="0.5"
+        step="0.01"
         type="number"
         value={draft}
       />
