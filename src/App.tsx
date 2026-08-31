@@ -78,23 +78,23 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function distributeOffsetDelta(targetOverall: number, fixedSize: number, firstOffset: number, secondOffset: number): [number, number] {
-  const availableOffset = Math.max(0, targetOverall - fixedSize);
+function distributeOffsetDelta(targetOverall: number, fixedSize: number, firstOffset: number, secondOffset: number, minFirst = 0, minSecond = 0): [number, number] {
+  const availableOffset = Math.max(minFirst + minSecond, targetOverall - fixedSize);
   const equalDelta = (availableOffset - firstOffset - secondOffset) / 2;
   let nextFirst = firstOffset + equalDelta;
   let nextSecond = secondOffset + equalDelta;
 
-  if (nextFirst < 0) {
-    nextSecond += nextFirst;
-    nextFirst = 0;
+  if (nextFirst < minFirst) {
+    nextSecond += (nextFirst - minFirst);
+    nextFirst = minFirst;
   }
 
-  if (nextSecond < 0) {
-    nextFirst += nextSecond;
-    nextSecond = 0;
+  if (nextSecond < minSecond) {
+    nextFirst += (nextSecond - minSecond);
+    nextSecond = minSecond;
   }
 
-  return [Math.max(0, nextFirst), Math.max(0, nextSecond)];
+  return [Math.max(minFirst, nextFirst), Math.max(minSecond, nextSecond)];
 }
 
 function ColorWheelIcon() {
@@ -218,10 +218,13 @@ function App() {
   const bowlCount = countByQuantity[config.bowlQuantity ?? "single"];
   const selectedQuantityIndex = quantityOptions.findIndex((item) => item.quantity === config.bowlQuantity);
   const selectedFinishIndex = (["glossy", "matte"] as const).indexOf(bowlFinish);
-  const fixedSinkWidth = bowlCount * (config.bowl?.size.length ?? 500);
+  const fixedSinkWidth = (bowlCount * (config.bowl?.size.length ?? 500)) + (bowlCount > 1 ? (bowlCount - 1) * Number(config.dimensions.bowlSpacing ?? 100) : 0);
   const fixedSinkDepth = config.bowl?.size.depth ?? 410;
-  const maximumOverallWidth = Math.max(2400, fixedSinkWidth + 1000);
-  const maximumOverallDepth = Math.max(1200, fixedSinkDepth + 1000);
+  const minLeftRight = config.mountingType === "wall_mounted" ? 100 : 50;
+  const minOverallWidth = fixedSinkWidth + (minLeftRight * 2);
+  const minOverallDepth = fixedSinkDepth + 50 + 100; // Front is 50, Rear is 100
+  const maximumOverallWidth = 3000;
+  const maximumOverallDepth = 600;
   const selectedBowlColor = bowlColor === "custom"
     ? customBowlColor
     : bowlColorOptions.find((option) => option.id === bowlColor)?.color ?? "#f7f7f5";
@@ -234,18 +237,33 @@ function App() {
   const { shape: selectedShape, size: selectedSize } = getShapeAndSizeFromBowlId(bowlId);
 
   // Model-specific pricing variables
-  const baseBowlPrice = config.bowl?.basePrice ?? 340;
-  const colorSurchargePrice = (bowlColor === "black" || bowlColor === "gray") ? (config.bowl?.colorPrice ?? 100) : 0;
-  const drainCapPrice = selectedBowlType === "tilt" ? 0 : 29;
-  const installationPrice = config.mountingType === "wall_mounted" ? 100 : 150;
+  const lengthInMeters = (dims.L ?? 0) / 1000;
+  const baseSinkPrice = lengthInMeters * 210;
+  
+  const extraBowlCount = bowlCount > 1 ? bowlCount - 1 : 0;
+  const extraBowlPrice = extraBowlCount * 80;
+  
+  const wallMountPrice = config.mountingType === "wall_mounted" ? 30 : 0;
+  const packingPrice = config.mountingType === "countertop" ? 50 : 0;
 
-  const modelBaseTotal = baseBowlPrice * bowlCount;
-  const colorChangeTotal = colorSurchargePrice * bowlCount;
-  const drainCapTotal = drainCapPrice * bowlCount;
+  const heightInMm = dims.H ?? config.bowl?.size.height ?? 0;
+  const extraHeightPrice = heightInMm > 200 ? 50 * lengthInMeters : 0;
 
-  const buildSubtotal = modelBaseTotal + installationPrice;
-  const finishSubtotal = colorChangeTotal + drainCapTotal;
-  const total = buildSubtotal + finishSubtotal;
+  const factoryCost = baseSinkPrice + extraBowlPrice + wallMountPrice + packingPrice + extraHeightPrice;
+  const total = Math.round(factoryCost * 1.85);
+
+  console.log("=== Pricing Debug ===");
+  console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
+  console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
+  console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
+  console.log(`Packing Price: $${packingPrice}`);
+  console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
+  console.log(`=> Total Factory Cost: $${factoryCost}`);
+  console.log(`=> Final Total (x1.85): $${total}`);
+  console.log("=====================");
+
+  const buildSubtotal = total;
+  const finishSubtotal = 0;
  
   const selectedDrainEdge: "left" | "rear" | "right" = bowlId === "UB-04-RL"
     ? "left"
@@ -431,30 +449,58 @@ function App() {
   };
 
   const updateDimension = (field: keyof SinkDimensions, value: number) => {
-    setConfig((previous) => ({
-      ...previous,
-      dimensions: {
-        ...previous.dimensions,
-        [field]: value,
-      },
-    }));
+    setConfig((previous) => {
+      let clampedValue = value;
+      if (field === "L2" || field === "L3") {
+        clampedValue = Math.max(value, previous.mountingType === "wall_mounted" ? 100 : 50);
+      } else if (field === "D3") {
+        clampedValue = Math.max(value, 50);
+      } else if (field === "D2") {
+        clampedValue = Math.max(value, 100);
+      } else if (field === "bowlSpacing") {
+        clampedValue = Math.max(value, 100);
+      } else if (field === "H") {
+        clampedValue = Math.max(value, previous.bowl?.size.height ?? 80);
+      }
+
+      return {
+        ...previous,
+        dimensions: {
+          ...previous.dimensions,
+          [field]: clampedValue,
+        },
+      };
+    });
   };
 
   const updateMountingType = (mountingType: MountingType) => {
-    setConfig((previous) => ({
-      ...previous,
-      mountingType,
-    }));
+    setConfig((previous) => {
+      const minLeftRight = mountingType === "wall_mounted" ? 100 : 50;
+      const currentL2 = Number(previous.dimensions.L2 ?? 0);
+      const currentL3 = Number(previous.dimensions.L3 ?? 0);
+      
+      return {
+        ...previous,
+        mountingType,
+        dimensions: {
+          ...previous.dimensions,
+          L2: Math.max(currentL2, minLeftRight),
+          L3: Math.max(currentL3, minLeftRight),
+        },
+      };
+    });
   };
 
   const updateOverallWidth = (value: number) => {
     setConfig((previous) => {
       const bowlWidth = previous.bowl?.size.length ?? 500;
       const count = countByQuantity[previous.bowlQuantity ?? "single"];
-      const fixedWidth = count * bowlWidth;
+      const gap = count > 1 ? Number(previous.dimensions.bowlSpacing ?? 100) : 0;
+      const fixedWidth = (count * bowlWidth) + ((count - 1) * gap);
       const left = Number(previous.dimensions.L2 ?? 0);
       const right = Number(previous.dimensions.L3 ?? 0);
-      const [nextLeft, nextRight] = distributeOffsetDelta(value, fixedWidth, left, right);
+      const minLeftRight = previous.mountingType === "wall_mounted" ? 100 : 50;
+      const [nextLeft, nextRight] = distributeOffsetDelta(value, fixedWidth, left, right, minLeftRight, minLeftRight);
 
       return {
         ...previous,
@@ -472,7 +518,7 @@ function App() {
       const bowlDepth = previous.bowl?.size.depth ?? 410;
       const front = Number(previous.dimensions.D3 ?? 0);
       const rear = Number(previous.dimensions.D2 ?? 0);
-      const [nextFront, nextRear] = distributeOffsetDelta(value, bowlDepth, front, rear);
+      const [nextFront, nextRear] = distributeOffsetDelta(value, bowlDepth, front, rear, 50, 100);
 
       return {
         ...previous,
@@ -726,8 +772,8 @@ function App() {
                     <SliderRow
                       label="Spacing"
                       max={600}
-                      min={0}
-                      value={Number(config.dimensions.bowlSpacing ?? 0)}
+                      min={100}
+                      value={Number(config.dimensions.bowlSpacing ?? 100)}
                       onChange={(value) => updateDimension("bowlSpacing", value)}
                     />
                   </div>
@@ -741,11 +787,11 @@ function App() {
 
                 {/* Length Block */}
                 <div style={{ display: "grid", gap: "16px", marginTop: "16px" }}>
-                  <SliderRow label="Width" max={maximumOverallWidth} min={fixedSinkWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
+                  <SliderRow label="Width" max={maximumOverallWidth} min={minOverallWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
                   
                   <div className="offset-grid">
-                    <OffsetControl label="Left" value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
-                    <OffsetControl label="Right" value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
+                    <OffsetControl label="Left" min={config.mountingType === "wall_mounted" ? 100 : 50} value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
+                    <OffsetControl label="Right" min={config.mountingType === "wall_mounted" ? 100 : 50} value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
                   </div>
                 </div>
 
@@ -754,11 +800,11 @@ function App() {
 
                 {/* Width Block */}
                 <div style={{ display: "grid", gap: "16px" }}>
-                  <SliderRow label="Depth" max={maximumOverallDepth} min={fixedSinkDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
+                  <SliderRow label="Depth" max={maximumOverallDepth} min={minOverallDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
                   
                   <div className="offset-grid">
-                    <OffsetControl label="Front" value={Number(config.dimensions.D3 ?? 0)} onChange={(value) => updateDimension("D3", value)} />
-                    <OffsetControl label="Rear" value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
+                    <OffsetControl label="Front" min={50} value={Number(config.dimensions.D3 ?? 0)} onChange={(value) => updateDimension("D3", value)} />
+                    <OffsetControl label="Rear" min={100} value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
                   </div>
                 </div>
 
@@ -767,7 +813,7 @@ function App() {
 
                 {/* Height Block */}
                 <div>
-                  <SliderRow label="Height" max={500} min={80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
+                  <SliderRow label="Height" max={500} min={config.bowl?.size.height ?? 80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
                 </div>
               </section>
 
@@ -1034,7 +1080,7 @@ function SliderRow({ label, max, min, onChange, value }: SliderRowProps) {
         <span>{label}</span>
         <NumericInput ariaLabel={`${label} in inches`} max={maxInInches} min={minInInches} onCommit={handleNumericCommit} suffix="in" value={valInInches} />
       </div>
-      <input max={maxInInches} min={minInInches} step="0.1" style={sliderStyle} type="range" value={sliderValue} onChange={handleSliderChange} />
+      <input max={maxInInches} min={minInInches} step="0.01" style={sliderStyle} type="range" value={sliderValue} onChange={handleSliderChange} />
     </div>
   );
 }
@@ -1043,12 +1089,14 @@ interface OffsetControlProps {
   label: string;
   onChange: (value: number) => void;
   value: number;
+  min?: number;
+  max?: number;
 }
 
-function OffsetControl({ label, onChange, value }: OffsetControlProps) {
+function OffsetControl({ label, onChange, value, min = 0, max = 1200 }: OffsetControlProps) {
   const valInInches = Number((value / 25.4).toFixed(2));
-  const minInInches = 0;
-  const maxInInches = 48; // 1200 mm / 25.4 is ~47.2, so 48in max is perfect!
+  const minInInches = Number((min / 25.4).toFixed(2));
+  const maxInInches = Number((max / 25.4).toFixed(2));
 
   const handleSliderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const inchVal = Number(event.target.value);
@@ -1060,7 +1108,7 @@ function OffsetControl({ label, onChange, value }: OffsetControlProps) {
   };
 
   const sliderValue = clamp(valInInches, minInInches, maxInInches);
-  const progress = (sliderValue / maxInInches) * 100;
+  const progress = maxInInches === minInInches ? 0 : ((sliderValue - minInInches) / (maxInInches - minInInches)) * 100;
   const sliderStyle = { "--range-progress": `${progress}%` } as CSSProperties;
 
   return (
@@ -1079,7 +1127,7 @@ function OffsetControl({ label, onChange, value }: OffsetControlProps) {
       <input
         max={maxInInches}
         min={minInInches}
-        step="0.1"
+        step="0.01"
         style={sliderStyle}
         type="range"
         value={sliderValue}
