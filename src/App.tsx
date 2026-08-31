@@ -15,12 +15,12 @@ const initialConfig: SinkConfiguration = {
   mountingType: "countertop",
   sinkType: "CUSTOM_SINGLE",
   dimensions: {
-    L2: 250,
-    L3: 250,
-    D2: 165,
-    D3: 165,
+    L2: 50,
+    L3: 50,
+    D2: 100,
+    D3: 50,
     H: selectedStartBowl.size.height,
-    bowlSpacing: 203.2, // Default spacing is 8 inches (203.2 mm)
+    bowlSpacing: 100, // Minimum spacing
   },
 };
 
@@ -244,7 +244,7 @@ function App() {
   const extraBowlPrice = extraBowlCount * 80;
   
   const wallMountPrice = config.mountingType === "wall_mounted" ? 30 : 0;
-  const packingPrice = config.mountingType === "countertop" ? 50 : 0;
+  const packingPrice = 50;
 
   const heightInMm = dims.H ?? config.bowl?.size.height ?? 0;
   const extraHeightPrice = heightInMm > 200 ? 50 * lengthInMeters : 0;
@@ -252,15 +252,15 @@ function App() {
   const factoryCost = baseSinkPrice + extraBowlPrice + wallMountPrice + packingPrice + extraHeightPrice;
   const total = Math.round(factoryCost * 1.85);
 
-  // console.log("=== Pricing Debug ===");
-  // console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
-  // console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
-  // console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
-  // console.log(`Packing Price: $${packingPrice}`);
-  // console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
-  // console.log(`=> Total Factory Cost: $${factoryCost}`);
-  // console.log(`=> Final Total (x1.85): $${total}`);
-  // console.log("=====================");
+  console.log("=== Pricing Debug ===");
+  console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
+  console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
+  console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
+  console.log(`Packing Price: $${packingPrice}`);
+  console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
+  console.log(`=> Total Factory Cost: $${factoryCost}`);
+  console.log(`=> Final Total (x1.85): $${total}`);
+  console.log("=====================");
 
   const buildSubtotal = total;
   const finishSubtotal = 0;
@@ -907,7 +907,7 @@ function App() {
         </div>
 
         <footer className="cart-footer">
-          <div className="cart-total"><span>Total:</span><strong>${total}</strong></div>
+          <div className="cart-total"><span>Total:</span><strong>${total.toLocaleString()}</strong></div>
           <div className="cart-actions">
             <button className="summary-button" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
             <button className="add-cart-button" type="button">Add to Cart</button>
@@ -941,7 +941,7 @@ function App() {
                <div className="summary-group-card">
                  <div className="summary-group-header">
                    <strong>Build Subtotal</strong>
-                   <span>${buildSubtotal}</span>
+                   <span>${buildSubtotal.toLocaleString()}</span>
                  </div>
                  <div className="summary-group-divider" />
                  <ul className="summary-group-details">
@@ -978,7 +978,7 @@ function App() {
                <div className="summary-group-card">
                  <div className="summary-group-header">
                    <strong>Finish Subtotal</strong>
-                   <span>${finishSubtotal}</span>
+                   <span>${finishSubtotal.toLocaleString()}</span>
                  </div>
                  <div className="summary-group-divider" />
                  <ul className="summary-group-details">
@@ -1014,9 +1014,9 @@ function App() {
 
            <div className="summary-footer">
              <div className="summary-totals">
-               <div><span>Build</span><strong>${buildSubtotal}</strong></div>
-               <div><span>Finish</span><strong>${finishSubtotal}</strong></div>
-               <div className="summary-grand-total"><span>Total</span><strong>${total}</strong></div>
+               <div><span>Build</span><strong>${buildSubtotal.toLocaleString()}</strong></div>
+               <div><span>Finish</span><strong>${finishSubtotal.toLocaleString()}</strong></div>
+               <div className="summary-grand-total"><span>Total:</span><strong>${total.toLocaleString()}</strong></div>
              </div>
 
             <button className="summary-add-cart" type="button">Add to Cart</button>
