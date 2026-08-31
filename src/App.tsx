@@ -252,15 +252,15 @@ function App() {
   const factoryCost = baseSinkPrice + extraBowlPrice + wallMountPrice + packingPrice + extraHeightPrice;
   const total = Math.round(factoryCost * 1.85);
 
-  console.log("=== Pricing Debug ===");
-  console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
-  console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
-  console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
-  console.log(`Packing Price: $${packingPrice}`);
-  console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
-  console.log(`=> Total Factory Cost: $${factoryCost}`);
-  console.log(`=> Final Total (x1.85): $${total}`);
-  console.log("=====================");
+  // console.log("=== Pricing Debug ===");
+  // console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
+  // console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
+  // console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
+  // console.log(`Packing Price: $${packingPrice}`);
+  // console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
+  // console.log(`=> Total Factory Cost: $${factoryCost}`);
+  // console.log(`=> Final Total (x1.85): $${total}`);
+  // console.log("=====================");
 
   const buildSubtotal = total;
   const finishSubtotal = 0;
