@@ -172,6 +172,90 @@ button {
   display: block;
 }
 
+.ar-launcher-model {
+  height: 1px;
+  left: 0;
+  opacity: 0.001;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  width: 1px;
+}
+
+.ar-preview-backdrop {
+  align-items: center;
+  background: rgba(20, 20, 20, 0.42);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.ar-preview-dialog {
+  background: #ffffff;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.2);
+  display: grid;
+  grid-template-rows: auto minmax(300px, 65vh) auto;
+  max-width: 720px;
+  overflow: hidden;
+  width: min(720px, 100%);
+}
+
+.ar-preview-dialog header {
+  align-items: center;
+  border-bottom: 1px solid #e2e2e2;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px;
+}
+
+.ar-preview-dialog header strong {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ar-preview-dialog header button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  height: 36px;
+  justify-content: center;
+  padding: 0;
+  width: 36px;
+}
+
+.ar-preview-model {
+  background: #f5f5f3;
+  height: 100%;
+  width: 100%;
+}
+
+.ar-preview-launch {
+  align-items: center;
+  background: #1c1c1c;
+  border: 0;
+  bottom: 18px;
+  color: #ffffff;
+  display: flex;
+  gap: 8px;
+  left: 50%;
+  min-height: 44px;
+  padding: 0 18px;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.ar-preview-dialog > p {
+  color: #696d76;
+  font-size: 14px;
+  margin: 0;
+  padding: 12px 18px;
+  text-align: center;
+}
+
 .stage-canvas {
   background: radial-gradient(circle at center, #f7f8f6 30%, #e2e4e0 100%);
   border-radius: 8px;

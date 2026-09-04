@@ -2,8 +2,9 @@ import { Environment, Html, OrbitControls, useGLTF } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Box3, BoxGeometry, type BufferGeometry, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Box3, BoxGeometry, type BufferGeometry, Group, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
 import { assetUrl, modelUrl as resolveModelUrl } from "../integrations/storefront";
@@ -23,6 +24,7 @@ interface Dimension3DPreviewProps {
   bowlFinish?: BowlFinish;
   config: SinkConfiguration;
   drainFinish?: DrainFinish;
+  onArModelReady?: (model: Blob) => void;
   showDimensions?: boolean;
 }
 
@@ -49,6 +51,7 @@ type LightSettingKey = keyof LightSettings;
 
 interface SinkModelProps {
   appearance: SinkAppearance;
+  arModelRef: RefObject<Group | null>;
   config: SinkConfiguration;
   showDimensions: boolean;
 }
@@ -514,7 +517,7 @@ function Measurements({ show, config }: MeasurementsProps) {
   );
 }
 
-function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
+function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModelProps) {
   const dims = mergedDimensions(config);
   const quantity = config.bowlQuantity ?? "single";
   const count = quantity === "triple" ? 3 : quantity === "double" ? 2 : 1;
@@ -548,7 +551,8 @@ function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
   }));
 
   return (
-    <group rotation={[0, -0.18, 0]}>
+    <>
+      <group ref={arModelRef} rotation={[0, -0.18, 0]}>
       {hasCountertopSupport && (
         <mesh castShadow position={[0, supportThickness / 2, 0]} receiveShadow>
           <boxGeometry args={[
@@ -585,9 +589,12 @@ function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
             z={bowl.z}
           />
         ))}
+      </group>
+      </group>
+      <group position={[0, productElevation, 0]} rotation={[0, -0.18, 0]}>
         <Measurements show={showDimensions} config={config} />
       </group>
-    </group>
+    </>
   );
 }
 
@@ -670,7 +677,49 @@ function AutoFitCamera({ depth, height, length }: AutoFitCameraProps) {
   return null;
 }
 
-export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy", config, drainFinish = "chrome", showDimensions }: Dimension3DPreviewProps) {
+interface ArModelExporterProps {
+  modelRef: RefObject<Group | null>;
+  onModelReady?: (model: Blob) => void;
+  revision: string;
+}
+
+function ArModelExporter({ modelRef, onModelReady, revision }: ArModelExporterProps) {
+  useEffect(() => {
+    if (!onModelReady) return;
+
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      const source = modelRef.current;
+      if (!source) return;
+
+      const exportRoot = source.clone(true);
+      exportRoot.scale.multiplyScalar(unit / 1000);
+      exportRoot.updateMatrixWorld(true);
+
+      try {
+        const result = await new GLTFExporter().parseAsync(exportRoot, {
+          binary: true,
+          onlyVisible: true,
+          trs: false,
+        });
+        if (!cancelled && result instanceof ArrayBuffer) {
+          onModelReady(new Blob([result], { type: "model/gltf-binary" }));
+        }
+      } catch {
+        // Keep the previous AR model if an intermediate configuration cannot be exported.
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [modelRef, onModelReady, revision]);
+
+  return null;
+}
+
+export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy", config, drainFinish = "chrome", onArModelReady, showDimensions }: Dimension3DPreviewProps) {
   const dims = mergedDimensions(config);
   const length = Number(dims.L || 1000);
   const depth = Number(dims.D || 500);
@@ -681,6 +730,8 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
   const fittedHeight = hasCountertopSupport ? height + 45 : height;
   const [debugOpen, setDebugOpen] = useState(false);
   const [lightSettings, setLightSettings] = useState<LightSettings>({ ...defaultLightSettings });
+  const arModelRef = useRef<Group>(null);
+  const arRevision = JSON.stringify({ bowlColor, bowlFinish, config, drainFinish });
 
   const updateLightSetting = (key: LightSettingKey, value: number) => {
     setLightSettings((previous) => ({ ...previous, [key]: value }));
@@ -786,7 +837,8 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
                   shadow-normalBias={lightSettings.shadowNormalBias}
                   shadow-radius={lightSettings.shadowRadius}
                 />
-                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} config={config} showDimensions={!!showDimensions} />
+                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} arModelRef={arModelRef} config={config} showDimensions={!!showDimensions} />
+                <ArModelExporter modelRef={arModelRef} onModelReady={onArModelReady} revision={arRevision} />
                 <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                   <planeGeometry args={[Math.max(20, sceneLength * 2.5), 15]} />
                   <shadowMaterial opacity={1} />

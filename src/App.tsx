@@ -1,5 +1,6 @@
 import { Bath, Box, Palette, Redo2, RefreshCw, Ruler, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import type { ModelViewerElement } from "@google/model-viewer";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
 import { bowlOptions } from "./data/bowlOptions";
 import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
@@ -161,7 +162,12 @@ function App() {
   const [bowlColor, setBowlColor] = useState<BowlColor>("gray");
   const [drainFinish, setDrainFinish] = useState<DrainFinish>("chrome");
   const [showDimensions, setShowDimensions] = useState(false);
+  const [arModelLoaded, setArModelLoaded] = useState(false);
+  const [arModelUrl, setArModelUrl] = useState<string>();
+  const [showArPreview, setShowArPreview] = useState(false);
   const [, setHistoryRevision] = useState(0);
+  const arModelUrlRef = useRef<string | undefined>(undefined);
+  const arViewerRef = useRef<ModelViewerElement>(null);
   const applyingHistory = useRef(false);
   const currentSnapshot = useMemo<HistorySnapshot>(() => ({
     bowlColor,
@@ -484,6 +490,43 @@ function App() {
   const selectedSinkName = bowlDetails[config.bowl?.id ?? ""]?.displayName ?? config.bowl?.name ?? "01";
   const productTitle = `Undermount Sink ${selectedSinkName}`;
 
+  const handleArModelReady = useCallback((model: Blob) => {
+    const nextUrl = URL.createObjectURL(model);
+    const previousUrl = arModelUrlRef.current;
+    arModelUrlRef.current = nextUrl;
+    setArModelLoaded(false);
+    setArModelUrl(nextUrl);
+    if (previousUrl) window.setTimeout(() => URL.revokeObjectURL(previousUrl), 1000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (arModelUrlRef.current) URL.revokeObjectURL(arModelUrlRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewer = arViewerRef.current;
+    if (!viewer || !arModelUrl) return;
+
+    const markLoaded = () => setArModelLoaded(true);
+    viewer.addEventListener("load", markLoaded);
+    if (viewer.loaded) markLoaded();
+    return () => viewer.removeEventListener("load", markLoaded);
+  }, [arModelUrl]);
+
+  const launchAr = () => {
+    const viewer = arViewerRef.current;
+    if (!viewer || !arModelLoaded) return;
+
+    if (viewer.canActivateAR) {
+      void viewer.activateAR().catch(() => setShowArPreview(true));
+      return;
+    }
+
+    setShowArPreview(true);
+  };
+
   const handleAddToCart = () => {
     const bowl = config.bowl ?? selectedStartBowl;
     const width = Number(dims.L ?? 0);
@@ -561,7 +604,7 @@ function App() {
           <img src={assetUrl("assets/poweredby-logo.png")} alt="Powered by Ikarus Delta" />
         </div>
         <div className="stage-canvas">
-          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} showDimensions={showDimensions} />
+          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} onArModelReady={handleArModelReady} showDimensions={showDimensions} />
         </div>
         <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
           <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
@@ -595,7 +638,13 @@ function App() {
           >
             <Ruler size={24} />
           </button>
-          <button className="toolbar-ar" disabled title="AR preview is not available in this prototype" type="button">
+          <button
+            className="toolbar-ar"
+            disabled={!arModelLoaded}
+            onClick={launchAr}
+            title={arModelLoaded ? "View in your space" : "Preparing AR model"}
+            type="button"
+          >
             <Box size={21} />
             <span>View in your space</span>
           </button>
@@ -1014,6 +1063,49 @@ function App() {
           </div>
         </section>
       </div>
+
+      <model-viewer
+        alt={productTitle}
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        ar-placement="floor"
+        ar-scale="fixed"
+        className="ar-launcher-model"
+        loading="eager"
+        ref={arViewerRef}
+        src={arModelUrl}
+      />
+
+      {showArPreview && arModelUrl && (
+        <div className="ar-preview-backdrop" onMouseDown={() => setShowArPreview(false)}>
+          <section aria-labelledby="ar-preview-title" aria-modal="true" className="ar-preview-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+            <header>
+              <strong id="ar-preview-title">AR Preview</strong>
+              <button aria-label="Close AR preview" onClick={() => setShowArPreview(false)} title="Close" type="button">
+                <X size={20} />
+              </button>
+            </header>
+            <model-viewer
+              alt={productTitle}
+              ar
+              ar-modes="webxr scene-viewer quick-look"
+              ar-placement="floor"
+              ar-scale="fixed"
+              camera-controls
+              className="ar-preview-model"
+              loading="eager"
+              src={arModelUrl}
+              touch-action="pan-y"
+            >
+              <button className="ar-preview-launch" slot="ar-button" type="button">
+                <Box size={20} />
+                <span>View in your space</span>
+              </button>
+            </model-viewer>
+            <p>AR is unavailable on this device.</p>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
