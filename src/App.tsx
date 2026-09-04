@@ -6,17 +6,18 @@ import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDim
 import { mergedDimensions } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
+import { assetUrl, formatCurrency, handoffAddToCart, storefrontConfig, type SinkCartPayload } from "./integrations/storefront";
 
 const selectedStartBowl = bowlOptions.find((bowl) => bowl.id === "UB-04-M") ?? bowlOptions[0];
 
 const initialConfig: SinkConfiguration = {
   bowl: selectedStartBowl,
   bowlQuantity: "single",
-  mountingType: "countertop",
+  mountingType: "wall_mounted",
   sinkType: "CUSTOM_SINGLE",
   dimensions: {
-    L2: 50,
-    L3: 50,
+    L2: 100,
+    L3: 100,
     D2: 100,
     D3: 50,
     H: selectedStartBowl.size.height,
@@ -31,14 +32,13 @@ const quantityOptions: Array<{ label: string; quantity: BowlQuantity; price: str
 ];
 
 type BowlFinish = "glossy" | "matte";
-type BowlColor = "white" | "black" | "gray" | "custom";
+type BowlColor = "white" | "black" | "gray";
 type DrainFinish = "chrome" | "black" | "brushed-nickel" | "glossy-white" | "matte-white";
 
 interface HistorySnapshot {
   bowlColor: BowlColor;
   bowlFinish: BowlFinish;
   config: SinkConfiguration;
-  customBowlColor: string;
   drainFinish: DrainFinish;
 }
 
@@ -48,7 +48,7 @@ interface ConfiguratorHistory {
   present: HistorySnapshot;
 }
 
-const bowlColorOptions: Array<{ color: string; id: Exclude<BowlColor, "custom">; label: string }> = [
+const bowlColorOptions: Array<{ color: string; id: BowlColor; label: string }> = [
   { color: "#f7f7f5", id: "white", label: "White" },
   { color: "#454545", id: "black", label: "Black" },
   { color: "#a4a4a4", id: "gray", label: "Gray" },
@@ -78,6 +78,10 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function toInches(value: number) {
+  return Number((value / 25.4).toFixed(4));
+}
+
 function distributeOffsetDelta(targetOverall: number, fixedSize: number, firstOffset: number, secondOffset: number, minFirst = 0, minSecond = 0): [number, number] {
   const availableOffset = Math.max(minFirst + minSecond, targetOverall - fixedSize);
   const equalDelta = (availableOffset - firstOffset - secondOffset) / 2;
@@ -95,48 +99,6 @@ function distributeOffsetDelta(targetOverall: number, fixedSize: number, firstOf
   }
 
   return [Math.max(minFirst, nextFirst), Math.max(minSecond, nextSecond)];
-}
-
-function ColorWheelIcon() {
-  const segments = [];
-  const R1 = 9;
-  const R2 = 21;
-  const center = 24;
-  const gap = 3.5;
-
-  for (let i = 0; i < 8; i++) {
-    const startAngleDeg = i * 45 + gap;
-    const endAngleDeg = (i + 1) * 45 - gap;
-
-    const startRad = (startAngleDeg * Math.PI) / 180;
-    const endRad = (endAngleDeg * Math.PI) / 180;
-
-    const x1_in = center + R1 * Math.cos(startRad);
-    const y1_in = center + R1 * Math.sin(startRad);
-    const x2_in = center + R1 * Math.cos(endRad);
-    const y2_in = center + R1 * Math.sin(endRad);
-
-    const x1_out = center + R2 * Math.cos(startRad);
-    const y1_out = center + R2 * Math.sin(startRad);
-    const x2_out = center + R2 * Math.cos(endRad);
-    const y2_out = center + R2 * Math.sin(endRad);
-
-    const d = `
-      M ${x1_in} ${y1_in}
-      L ${x1_out} ${y1_out}
-      A ${R2} ${R2} 0 0 1 ${x2_out} ${y2_out}
-      L ${x2_in} ${y2_in}
-      A ${R1} ${R1} 0 0 0 ${x1_in} ${y1_in}
-      Z
-    `;
-    segments.push(<path d={d} key={i} fill="currentColor" />);
-  }
-
-  return (
-    <svg viewBox="0 0 48 48" width="26" height="26" style={{ display: "block" }} aria-hidden="true">
-      {segments}
-    </svg>
-  );
 }
 
 type BowlShape = "rectangle" | "oval";
@@ -197,7 +159,6 @@ function App() {
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [bowlFinish, setBowlFinish] = useState<BowlFinish>("glossy");
   const [bowlColor, setBowlColor] = useState<BowlColor>("gray");
-  const [customBowlColor, setCustomBowlColor] = useState("#e6e6e6");
   const [drainFinish, setDrainFinish] = useState<DrainFinish>("chrome");
   const [showDimensions, setShowDimensions] = useState(false);
   const [, setHistoryRevision] = useState(0);
@@ -206,9 +167,8 @@ function App() {
     bowlColor,
     bowlFinish,
     config,
-    customBowlColor,
     drainFinish,
-  }), [bowlColor, bowlFinish, config, customBowlColor, drainFinish]);
+  }), [bowlColor, bowlFinish, config, drainFinish]);
   const history = useRef<ConfiguratorHistory>({
     future: [],
     past: [],
@@ -225,12 +185,8 @@ function App() {
   const minOverallDepth = fixedSinkDepth + 50 + 100; // Front is 50, Rear is 100
   const maximumOverallWidth = 3000;
   const maximumOverallDepth = 600;
-  const selectedBowlColor = bowlColor === "custom"
-    ? customBowlColor
-    : bowlColorOptions.find((option) => option.id === bowlColor)?.color ?? "#f7f7f5";
-  const selectedBowlColorLabel = bowlColor === "custom"
-    ? `Custom (${customBowlColor.toUpperCase()})`
-    : bowlColorOptions.find((option) => option.id === bowlColor)?.label ?? "White";
+  const selectedBowlColor = bowlColorOptions.find((option) => option.id === bowlColor)?.color ?? "#f7f7f5";
+  const selectedBowlColorLabel = bowlColorOptions.find((option) => option.id === bowlColor)?.label ?? "White";
   const selectedDrainFinish = drainFinishOptions.find((option) => option.id === drainFinish) ?? drainFinishOptions[0];
   const bowlId = config.bowl?.id ?? "UB-01";
   const selectedBowlType = getBowlTypeFromId(bowlId);
@@ -250,21 +206,12 @@ function App() {
   const extraHeightPrice = heightInMm > 200 ? 50 * lengthInMeters : 0;
 
   const factoryCost = baseSinkPrice + extraBowlPrice + wallMountPrice + packingPrice + extraHeightPrice;
-  const total = Math.round(factoryCost * 1.85);
+  const buildSubtotal = Math.round(factoryCost * 1.85);
+  const bowlColorPrice = bowlColor === "white" ? 0 : (config.bowl?.colorPrice ?? 100);
+  const drainCapPrice = selectedDrainFinish.price;
+  const finishSubtotal = bowlColorPrice + drainCapPrice;
+  const total = buildSubtotal + finishSubtotal;
 
-  console.log("=== Pricing Debug ===");
-  console.log(`Length (m): ${lengthInMeters} (Price: $${baseSinkPrice})`);
-  console.log(`Extra Bowls: ${extraBowlCount} (Price: $${extraBowlPrice})`);
-  console.log(`Wall Mount: ${config.mountingType === "wall_mounted" ? "Yes" : "No"} (Price: $${wallMountPrice})`);
-  console.log(`Packing Price: $${packingPrice}`);
-  console.log(`Extra Height: >200mm? ${heightInMm > 200 ? "Yes" : "No"} (Price: $${extraHeightPrice})`);
-  console.log(`=> Total Factory Cost: $${factoryCost}`);
-  console.log(`=> Final Total (x1.85): $${total}`);
-  console.log("=====================");
-
-  const buildSubtotal = total;
-  const finishSubtotal = 0;
- 
   const selectedDrainEdge: "left" | "rear" | "right" = bowlId === "UB-04-RL"
     ? "left"
     : (bowlId === "UB-04-LR" ? "right" : "rear");
@@ -381,7 +328,6 @@ function App() {
       historyState.present.config === currentSnapshot.config
       && historyState.present.bowlColor === currentSnapshot.bowlColor
       && historyState.present.bowlFinish === currentSnapshot.bowlFinish
-      && historyState.present.customBowlColor === currentSnapshot.customBowlColor
       && historyState.present.drainFinish === currentSnapshot.drainFinish
     ) {
       return;
@@ -398,7 +344,6 @@ function App() {
     setConfig(snapshot.config);
     setBowlColor(snapshot.bowlColor);
     setBowlFinish(snapshot.bowlFinish);
-    setCustomBowlColor(snapshot.customBowlColor);
     setDrainFinish(snapshot.drainFinish);
   };
 
@@ -539,11 +484,81 @@ function App() {
   const selectedSinkName = bowlDetails[config.bowl?.id ?? ""]?.displayName ?? config.bowl?.name ?? "01";
   const productTitle = `Undermount Sink ${selectedSinkName}`;
 
+  const handleAddToCart = () => {
+    const bowl = config.bowl ?? selectedStartBowl;
+    const width = Number(dims.L ?? 0);
+    const depth = Number(dims.D ?? 0);
+    const height = Number(dims.H ?? bowl.size.height);
+    const left = Number(dims.L2 ?? 0);
+    const right = Number(dims.L3 ?? 0);
+    const front = Number(dims.D3 ?? 0);
+    const rear = Number(dims.D2 ?? 0);
+    const bowlSpacing = Number(dims.bowlSpacing ?? 0);
+    const installationId = config.mountingType === "wall_mounted" ? "wall_mounted" : "countertop";
+    const payload: SinkCartPayload = {
+      version: 1,
+      productHandle: storefrontConfig.productHandle,
+      currency: storefrontConfig.currency,
+      price: { build: buildSubtotal, finish: finishSubtotal, total },
+      selection: {
+        bowl: {
+          count: bowlCount,
+          modelId: bowl.id,
+          modelName: bowl.name,
+          quantityId: config.bowlQuantity ?? "single",
+          shape: selectedBowlType === "tilt" ? "ramp" : selectedBowlType === "round" ? "oval" : "trough",
+          size: selectedSize,
+        },
+        installation: {
+          id: installationId,
+          label: installationId === "wall_mounted" ? "Wall Mounted" : "Countertop",
+          sinkMount: "undermount",
+        },
+        color: { hex: selectedBowlColor, id: bowlColor, label: selectedBowlColorLabel },
+        finish: bowlFinish,
+        drainCapFinish: drainFinish,
+        drainEdge: selectedDrainEdge,
+        dimensionsInches: {
+          overall: { width: toInches(width), depth: toInches(depth), height: toInches(height) },
+          bowl: {
+            width: toInches(bowl.size.length),
+            depth: toInches(bowl.size.depth),
+            height: toInches(bowl.size.height),
+            innerWidth: toInches(bowl.innerSize.length),
+            innerDepth: toInches(bowl.innerSize.depth),
+          },
+          offsets: {
+            left: toInches(left),
+            right: toInches(right),
+            front: toInches(front),
+            rear: toInches(rear),
+            betweenBowls: toInches(bowlSpacing),
+          },
+          codes: {
+            L: toInches(width),
+            L1: toInches(Number(dims.L1 ?? bowl.size.length)),
+            L2: toInches(left),
+            L3: toInches(right),
+            D: toInches(depth),
+            D1: toInches(Number(dims.D1 ?? bowl.size.depth)),
+            D2: toInches(rear),
+            D3: toInches(front),
+            H: toInches(height),
+            bowlSpacing: toInches(bowlSpacing),
+          },
+        },
+      },
+      specialInstructions,
+    };
+
+    handoffAddToCart(payload);
+  };
+
   return (
     <main className="builder-page">
       <section className="stage">
         <div className="stage-brand-badge">
-          <img src="/assets/poweredby-logo.png" alt="Powered by Ikarus Delta" />
+          <img src={assetUrl("assets/poweredby-logo.png")} alt="Powered by Ikarus Delta" />
         </div>
         <div className="stage-canvas">
           <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} showDimensions={showDimensions} />
@@ -599,7 +614,7 @@ function App() {
               <section className="control-section">
                 <div className="section-heading">
                   <span>Installation</span>
-                  <strong>{config.mountingType === "wall_mounted" ? "+$100" : "+$150"}</strong>
+                  <strong>{`+${formatCurrency(config.mountingType === "wall_mounted" ? 100 : 150)}`}</strong>
                 </div>
                 <div className="mounting-card-grid">
                   <button
@@ -640,7 +655,7 @@ function App() {
                         type="button"
                         title={typeDisplayNames[type]}
                       >
-                        <img src={`/assets/${type}${selectedBowlType === type ? "_active" : ""}.webp`} alt={typeDisplayNames[type]} />
+                        <img src={assetUrl(`assets/${type}${selectedBowlType === type ? "_active" : ""}.webp`)} alt={typeDisplayNames[type]} />
                       </button>
                     );
                   })}
@@ -716,11 +731,11 @@ function App() {
               <section className="control-section">
                 <div className="section-heading">
                   <span>Bowl Model</span>
-                  <strong>${config.bowl?.basePrice ?? 340}</strong>
+                  <strong>{formatCurrency(config.bowl?.basePrice ?? 340)}</strong>
                 </div>
                 <div className="bowl-model-card-grid">
                   {filteredBowls.map((bowl) => (
-                    <Tooltip key={bowl.id} label={`$${bowl.basePrice}`}>
+                    <Tooltip key={bowl.id} label={formatCurrency(bowl.basePrice ?? 0)}>
                       <Card
                         image={bowl.image}
                         label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
@@ -842,9 +857,9 @@ function App() {
                 <div className="section-heading">
                   <span>Color</span>
                   <strong style={{ color: "#a38460" }}>
-                    {bowlColor === "white" || bowlColor === "custom"
+                    {bowlColor === "white"
                       ? "Free"
-                      : `+$${config.bowl?.colorPrice ?? 100}`}
+                      : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
                   </strong>
                 </div>
                 <div className="finish-card-grid">
@@ -858,59 +873,37 @@ function App() {
                       {option.label}
                     </button>
                   ))}
-                  <label className={`color-card custom-color-card ${bowlColor === "custom" ? "selected" : ""}`} style={{ position: "relative" }}>
-                    <input
-                      aria-label="Choose a custom bowl color"
-                      onChange={(event) => {
-                        setCustomBowlColor(event.target.value);
-                        setBowlColor("custom");
-                      }}
-                      type="color"
-                      value={customBowlColor}
-                      style={{
-                        position: "absolute",
-                        opacity: 0,
-                        width: "100%",
-                        height: "100%",
-                        cursor: "pointer"
-                      }}
-                    />
-                    <span style={{ marginRight: "6px" }}>Custom</span>
-                    <ColorWheelIcon />
-                  </label>
                 </div>
               </section>
 
-              {selectedBowlType !== "tilt" && (
-                <section className="finish-section">
-                  <div className="section-heading">
-                    <span>Drain Cap Finish</span>
-                    <strong style={{ color: "#a38460" }}>+$29</strong>
-                  </div>
-                  <div className="finish-card-grid">
-                    {drainFinishOptions.map((option) => (
-                      <Tooltip key={option.id} label="+$29">
-                        <button
-                          className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
-                          onClick={() => setDrainFinish(option.id)}
-                          type="button"
-                        >
-                          {option.label} +$29
-                        </button>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </section>
-              )}
+              <section className="finish-section">
+                <div className="section-heading">
+                  <span>Drain Cap Finish</span>
+                  <strong style={{ color: "#a38460" }}>{`+${formatCurrency(29)}`}</strong>
+                </div>
+                <div className="finish-card-grid">
+                  {drainFinishOptions.map((option) => (
+                    <Tooltip key={option.id} label={`+${formatCurrency(29)}`}>
+                      <button
+                        className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
+                        onClick={() => setDrainFinish(option.id)}
+                        type="button"
+                      >
+                        {option.label} +{formatCurrency(29)}
+                      </button>
+                    </Tooltip>
+                  ))}
+                </div>
+              </section>
             </div>
           )}
         </div>
 
         <footer className="cart-footer">
-          <div className="cart-total"><span>Total:</span><strong>${total.toLocaleString()}</strong></div>
+          <div className="cart-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
           <div className="cart-actions">
             <button className="summary-button" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
-            <button className="add-cart-button" type="button">Add to Cart</button>
+            <button className="add-cart-button" onClick={handleAddToCart} type="button">Add to Cart</button>
           </div>
         </footer>
       </aside>
@@ -941,7 +934,7 @@ function App() {
                <div className="summary-group-card">
                  <div className="summary-group-header">
                    <strong>Build Subtotal</strong>
-                   <span>${buildSubtotal.toLocaleString()}</span>
+                   <span>{formatCurrency(buildSubtotal)}</span>
                  </div>
                  <div className="summary-group-divider" />
                  <ul className="summary-group-details">
@@ -978,7 +971,7 @@ function App() {
                <div className="summary-group-card">
                  <div className="summary-group-header">
                    <strong>Finish Subtotal</strong>
-                   <span>${finishSubtotal.toLocaleString()}</span>
+                   <span>{formatCurrency(finishSubtotal)}</span>
                  </div>
                  <div className="summary-group-divider" />
                  <ul className="summary-group-details">
@@ -990,12 +983,10 @@ function App() {
                      <span>Bowl Finish:</span>
                      <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
                    </li>
-                   {selectedBowlType !== "tilt" && (
-                     <li>
-                       <span>Drain Cap:</span>
-                       <strong>{selectedDrainFinish.label}</strong>
-                     </li>
-                   )}
+                   <li>
+                     <span>Drain Cap:</span>
+                     <strong>{selectedDrainFinish.label}</strong>
+                   </li>
                  </ul>
                </div>
              </div>
@@ -1006,7 +997,7 @@ function App() {
                <span>Special Instructions</span>
                <textarea
                  onChange={(event) => setSpecialInstructions(event.target.value)}
-                 placeholder="I would like to get my sink in a custom red wine finish"
+                 placeholder="Add any production or delivery instructions"
                  value={specialInstructions}
                />
              </label>
@@ -1014,12 +1005,12 @@ function App() {
 
            <div className="summary-footer">
              <div className="summary-totals">
-               <div><span>Build</span><strong>${buildSubtotal.toLocaleString()}</strong></div>
-               <div><span>Finish</span><strong>${finishSubtotal.toLocaleString()}</strong></div>
-               <div className="summary-grand-total"><span>Total:</span><strong>${total.toLocaleString()}</strong></div>
+               <div><span>Build</span><strong>{formatCurrency(buildSubtotal)}</strong></div>
+               <div><span>Finish</span><strong>{formatCurrency(finishSubtotal)}</strong></div>
+               <div className="summary-grand-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
              </div>
 
-            <button className="summary-add-cart" type="button">Add to Cart</button>
+            <button className="summary-add-cart" onClick={handleAddToCart} type="button">Add to Cart</button>
           </div>
         </section>
       </div>
@@ -1039,9 +1030,9 @@ function SummaryItem({ children, label, onEdit, price }: SummaryItemProps) {
     <article className="summary-item">
       <div>
         <strong>{label}</strong>
-        <span>${price}</span>
+        <span>{formatCurrency(price)}</span>
         <button aria-label={`Edit ${label}`} onClick={onEdit} title={`Edit ${label}`} type="button">
-          <img src="/assets/edit.svg" alt="Edit" style={{ width: "16px", height: "16px" }} />
+          <img src={assetUrl("assets/edit.svg")} alt="Edit" style={{ width: "16px", height: "16px" }} />
         </button>
       </div>
       {children}

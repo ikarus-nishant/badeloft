@@ -1,11 +1,12 @@
 import { Environment, Html, OrbitControls, useGLTF } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box3, BoxGeometry, type BufferGeometry, Mesh, MeshStandardMaterial, type Object3D, Vector3 } from "three";
+import { Box3, BoxGeometry, type BufferGeometry, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
+import { assetUrl, modelUrl as resolveModelUrl } from "../integrations/storefront";
 import { mergedDimensions } from "../utils/calculations";
 
 type BowlFinish = "glossy" | "matte";
@@ -79,6 +80,7 @@ interface CountertopModelProps {
 }
 
 const unit = 180;
+const countertopCapThickness = 0.045;
 
 const defaultLightSettings: LightSettings = {
   ambientIntensity: 0.6,
@@ -107,43 +109,116 @@ const drainMaterials: Record<DrainFinish, { color: string; metalness: number; ro
   "matte-white": { color: "#e8e6e1", metalness: 0.04, roughness: 0.76 },
 };
 
-const countertopMaterial = {
-  color: "#050505",
-  metalness: 0.08,
-  roughness: 0.42,
-};
-
 function toScene(value: number) {
   return value / unit;
 }
 
-function findModelPart(object: Object3D): "connector" | "drain_cap" | "sink" | undefined {
+type ModelPart = "connector" | "drain_cap" | "sink";
+
+function modelPartFromName(name: string): ModelPart | undefined {
+  const normalizedName = name.trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/\.\d+$/, "");
+  if (normalizedName.startsWith("connector")) return "connector";
+  if (normalizedName.startsWith("drain_cap") || normalizedName.startsWith("draincap")) return "drain_cap";
+  if (normalizedName.startsWith("sink") || normalizedName.startsWith("basin")) return "sink";
+  return undefined;
+}
+
+function findModelPart(object: Object3D): ModelPart | undefined {
+  if (object instanceof Mesh) {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      const materialPart = modelPartFromName(material.name);
+      if (materialPart) return materialPart;
+    }
+  }
+
   let current: Object3D | null = object;
 
   while (current) {
-    const name = current.name.trim().toLowerCase();
-    if (name === "connector" || name === "drain_cap" || name === "sink") return name;
+    const nodePart = modelPartFromName(current.name);
+    if (nodePart) return nodePart;
     current = current.parent;
+  }
+
+  if (object instanceof Mesh && object.geometry) {
+    object.geometry.computeBoundingBox();
+    const bounds = object.geometry.boundingBox;
+    if (!bounds) return undefined;
+
+    const size = new Vector3();
+    bounds.getSize(size);
+    const extents = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort((a, b) => a - b);
+
+    // Recent exports use generic Maya names. Their connector is a flat,
+    // full-footprint mesh while the basin has meaningful depth.
+    if (extents[0] <= Math.max(extents[2] * 0.01, 0.00001)) return "connector";
+    return "sink";
   }
 
   return undefined;
 }
 
+function conformConnectorNormals(mesh: Mesh) {
+  const geometry = mesh.geometry.clone();
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return;
+  }
+
+  const size = new Vector3();
+  bounds.getSize(size);
+  const extents = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)];
+  const largestExtent = Math.max(...extents);
+  const thinAxis = extents.indexOf(Math.min(...extents));
+  if (extents[thinAxis] > Math.max(largestExtent * 0.01, 0.00001)) {
+    geometry.dispose();
+    return;
+  }
+
+  if (!geometry.getAttribute("normal")) geometry.computeVertexNormals();
+  const normals = geometry.getAttribute("normal");
+  const countertopNormal = new Vector3(0, 1, 0)
+    .applyQuaternion(mesh.getWorldQuaternion(new Quaternion()).invert())
+    .normalize();
+
+  for (let index = 0; index < normals.count; index += 1) {
+    normals.setXYZ(index, countertopNormal.x, countertopNormal.y, countertopNormal.z);
+  }
+  normals.needsUpdate = true;
+
+  mesh.geometry = geometry;
+  mesh.castShadow = false;
+  mesh.userData.disposeGeometryOnUnmount = true;
+}
+
+function conformCountertopTopNormals(geometry: BufferGeometry) {
+  const normals = geometry.getAttribute("normal");
+  if (!normals) return geometry;
+
+  for (let index = 0; index < normals.count; index += 1) {
+    if (normals.getY(index) > 0.5) normals.setXYZ(index, 0, 1, 0);
+  }
+  normals.needsUpdate = true;
+  return geometry;
+}
+
 const bowlModelUrls: Record<string, string> = {
-  "UB-01": "/models/UB-01.glb",
-  "UB-02": "/models/UB-02.glb",
-  "UB-03": "/models/UB-03.glb",
-  "UB-04-M": "/models/UB-04-M.glb",
-  "UB-04-L": "/models/UB-04-L.glb",
-  "UB-04-RL": "/models/UB-04-RL.glb",
-  "UB-04-LR": "/models/UB-04-LR.glb",
-  "UB-04-32": "/models/UB-04-32.glb",
-  "UB-04-40": "/models/UB-04-40.glb",
-  "UB-04-XL": "/models/UB-04-XL.glb",
-  "UB-04-XXL": "/models/UB-04-XxL.glb",
-  "UB-05-M": "/models/UB-05-M.glb",
-  "UB-05-L": "/models/UB-05-L.glb",
-  "UB-05-XL": "/models/UB-05-XL.glb",
+  "UB-01": resolveModelUrl("UB-01.glb"),
+  "UB-02": resolveModelUrl("UB-02.glb"),
+  "UB-03": resolveModelUrl("UB-03.glb"),
+  "UB-04-M": resolveModelUrl("UB-04-M.glb"),
+  "UB-04-L": resolveModelUrl("UB-04-L.glb"),
+  "UB-04-RL": resolveModelUrl("UB-04-RL.glb"),
+  "UB-04-LR": resolveModelUrl("UB-04-LR.glb"),
+  "UB-04-32": resolveModelUrl("UB-04-32.glb"),
+  "UB-04-40": resolveModelUrl("UB-04-40.glb"),
+  "UB-04-XL": resolveModelUrl("UB-04-XL.glb"),
+  "UB-04-XXL": resolveModelUrl("UB-04-XxL.glb"),
+  "UB-05-M": resolveModelUrl("UB-05-M.glb"),
+  "UB-05-L": resolveModelUrl("UB-05-L.glb"),
+  "UB-05-XL": resolveModelUrl("UB-05-XL.glb"),
 };
 
 function cutGeometryWithBowls(baseGeometry: BoxGeometry, bowls: BowlPlacement[], bowlWidth: number, bowlDepth: number, height: number) {
@@ -193,12 +268,14 @@ function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, l
     const baseGeometry = new BoxGeometry(length, height, depth);
     baseGeometry.translate(0, height / 2, 0);
 
-    const capGeometry = new BoxGeometry(length + 0.04, 0.045, depth + 0.04);
-    capGeometry.translate(0, height + 0.022, 0);
+    const capGeometry = new BoxGeometry(length + 0.04, countertopCapThickness, depth + 0.04);
+    capGeometry.translate(0, height + countertopCapThickness / 2, 0);
 
     return {
       base: cutGeometryWithBowls(baseGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, height),
-      cap: cutGeometryWithBowls(capGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, height),
+      cap: conformCountertopTopNormals(
+        cutGeometryWithBowls(capGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, height),
+      ),
     } satisfies Record<"base" | "cap", BufferGeometry>;
   }, [bowls, cutterFootprint.depth, cutterFootprint.width, depth, height, length]);
 }
@@ -223,26 +300,43 @@ function CountertopModel(props: CountertopModelProps) {
 function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sinkHeight, width, x, z }: Required<BasinModelProps>) {
   const { scene } = useGLTF(modelUrl);
   const object = useMemo(() => {
+    const surfaceRoughness = bowlFinish === "matte" ? 0.72 : 0.2;
     const clone = scene.clone(true);
     const box = new Box3().setFromObject(clone);
     const size = new Vector3();
     const center = new Vector3();
     box.getSize(size);
     box.getCenter(center);
+    clone.updateMatrixWorld(true);
+    const countertopTopMarker = clone.getObjectByName("countertop_top")
+      ?? clone.getObjectByName("counter_top");
+    const markerPosition = countertopTopMarker
+      ? clone.worldToLocal(countertopTopMarker.getWorldPosition(new Vector3()))
+      : undefined;
 
-    clone.position.x -= center.x;
-    clone.position.z -= center.z;
     const scale = Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001));
-    clone.position.y -= box.max.y * scale;
+    clone.position.x = -center.x * scale;
+    clone.position.z = -center.z * scale;
+    clone.position.y = -(markerPosition?.y ?? box.max.y) * scale;
     clone.scale.setScalar(scale);
+    clone.updateMatrixWorld(true);
     clone.traverse((child) => {
       child.castShadow = true;
       child.receiveShadow = true;
 
       if (child instanceof Mesh) {
         const modelPart = findModelPart(child);
+        if (modelPart === "connector") conformConnectorNormals(child);
         const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
         const materials = sourceMaterials.map((sourceMaterial) => {
+          if (modelPart === "connector") {
+            return new MeshStandardMaterial({
+              color: bowlColor,
+              metalness: 0.04,
+              roughness: surfaceRoughness,
+            });
+          }
+
           const material = sourceMaterial instanceof MeshStandardMaterial
             ? sourceMaterial.clone()
             : new MeshStandardMaterial();
@@ -250,18 +344,15 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
           if (modelPart === "sink") {
             material.color.set(bowlColor);
             material.metalness = 0.04;
-            material.roughness = bowlFinish === "matte" ? 0.72 : 0.2;
+            material.roughness = surfaceRoughness;
           } else if (modelPart === "drain_cap") {
             const drainMaterial = drainMaterials[drainFinish];
             material.color.set(drainMaterial.color);
             material.metalness = drainMaterial.metalness;
             material.roughness = drainMaterial.roughness;
-          } else if (modelPart === "connector") {
-            material.color.set(bowlColor);
-            material.metalness = 0.04;
-            material.roughness = bowlFinish === "matte" ? 0.72 : 0.2;
           }
 
+          material.needsUpdate = true;
           return material;
         });
         child.material = Array.isArray(child.material) ? materials : materials[0];
@@ -277,13 +368,14 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
         if (child instanceof Mesh) {
           const materials = Array.isArray(child.material) ? child.material : [child.material];
           materials.forEach((material) => material.dispose());
+          if (child.userData.disposeGeometryOnUnmount) child.geometry.dispose();
         }
       });
     };
   }, [object]);
 
   return (
-    <group position={[x, sinkHeight + 0.045, z]}>
+    <group position={[x, sinkHeight + countertopCapThickness, z]}>
       <primitive object={object} />
     </group>
   );
@@ -444,6 +536,10 @@ function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
   const sceneRightInset = toScene(rightInset);
   const sceneTopInset = toScene(topInset);
   const sceneInternalGap = count > 1 ? toScene(Number(dims.bowlSpacing || 0)) : 0;
+  const hasCountertopSupport = config.mountingType === "countertop";
+  const supportThickness = toScene(45);
+  const supportOverhang = toScene(75);
+  const productElevation = hasCountertopSupport ? supportThickness : 0;
   const modelUrl = config.bowl?.id ? bowlModelUrls[config.bowl.id] : undefined;
 
   const bowls = Array.from({ length: count }, (_, index) => ({
@@ -453,37 +549,49 @@ function SinkModel({ appearance, config, showDimensions }: SinkModelProps) {
 
   return (
     <group rotation={[0, -0.18, 0]}>
-      <CountertopModel
-        bowlColor={appearance.bowlColor}
-        bowlFinish={appearance.bowlFinish}
-        bowlDepth={sceneBowlDepth}
-        bowlWidth={sceneBowlLength}
-        bowls={bowls}
-        depth={sceneDepth}
-        height={sceneHeight}
-        length={sceneLength}
-        modelUrl={modelUrl}
-      />
-      {bowls.map((bowl, index) => (
-        <BasinModel
+      {hasCountertopSupport && (
+        <mesh castShadow position={[0, supportThickness / 2, 0]} receiveShadow>
+          <boxGeometry args={[
+            sceneLength + supportOverhang * 2,
+            supportThickness,
+            sceneDepth + supportOverhang * 2,
+          ]} />
+          <meshStandardMaterial color="#b49b72" metalness={0} roughness={0.82} />
+        </mesh>
+      )}
+      <group position={[0, productElevation, 0]}>
+        <CountertopModel
           bowlColor={appearance.bowlColor}
           bowlFinish={appearance.bowlFinish}
-          depth={sceneBowlDepth}
-          drainFinish={appearance.drainFinish}
-          key={index}
+          bowlDepth={sceneBowlDepth}
+          bowlWidth={sceneBowlLength}
+          bowls={bowls}
+          depth={sceneDepth}
+          height={sceneHeight}
+          length={sceneLength}
           modelUrl={modelUrl}
-          sinkHeight={sceneHeight}
-          width={sceneBowlLength}
-          x={bowl.x}
-          z={bowl.z}
         />
-      ))}
-      <Measurements show={showDimensions} config={config} />
+        {bowls.map((bowl, index) => (
+          <BasinModel
+            bowlColor={appearance.bowlColor}
+            bowlFinish={appearance.bowlFinish}
+            depth={sceneBowlDepth}
+            drainFinish={appearance.drainFinish}
+            key={index}
+            modelUrl={modelUrl}
+            sinkHeight={sceneHeight}
+            width={sceneBowlLength}
+            x={bowl.x}
+            z={bowl.z}
+          />
+        ))}
+        <Measurements show={showDimensions} config={config} />
+      </group>
     </group>
   );
 }
 
-useGLTF.preload("/models/UB-01.glb");
+useGLTF.preload(bowlModelUrls["UB-01"]);
 
 interface LightControlProps {
   label: string;
@@ -517,11 +625,60 @@ function LightControl({ label, max, min, onChange, step, value }: LightControlPr
   );
 }
 
+interface AutoFitCameraProps {
+  depth: number;
+  height: number;
+  length: number;
+}
+
+interface OrbitControlsLike {
+  target: Vector3;
+  update: () => void;
+}
+
+function AutoFitCamera({ depth, height, length }: AutoFitCameraProps) {
+  const { camera, controls, size } = useThree();
+
+  useEffect(() => {
+    if (!(camera instanceof PerspectiveCamera) || size.height <= 0) return;
+
+    const sceneLength = toScene(length);
+    const sceneDepth = toScene(depth);
+    const sceneHeight = Math.max(0.42, toScene(height));
+    const target = new Vector3(0, sceneHeight / 2, 0);
+    const orbitControls = controls ? controls as unknown as OrbitControlsLike : undefined;
+    const previousTarget = orbitControls?.target ?? target;
+    const viewDirection = camera.position.clone().sub(previousTarget).normalize();
+    const verticalFov = MathUtils.degToRad(camera.fov);
+    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * (size.width / size.height));
+    const limitingFov = Math.min(verticalFov, horizontalFov);
+    const boundingRadius = Math.sqrt(
+      sceneLength * sceneLength + sceneDepth * sceneDepth + sceneHeight * sceneHeight,
+    ) / 2;
+    const requiredDistance = (boundingRadius / Math.sin(limitingFov / 2)) * 1.12;
+    const currentDistance = camera.position.distanceTo(target);
+
+    orbitControls?.target.copy(target);
+    if (currentDistance < requiredDistance) {
+      camera.position.copy(target).addScaledVector(viewDirection, requiredDistance);
+    }
+
+    camera.updateProjectionMatrix();
+    orbitControls?.update();
+  }, [camera, controls, depth, height, length, size.height, size.width]);
+
+  return null;
+}
+
 export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy", config, drainFinish = "chrome", showDimensions }: Dimension3DPreviewProps) {
   const dims = mergedDimensions(config);
   const length = Number(dims.L || 1000);
   const depth = Number(dims.D || 500);
   const height = Number(dims.H || 150);
+  const hasCountertopSupport = config.mountingType === "countertop";
+  const fittedLength = hasCountertopSupport ? length + 150 : length;
+  const fittedDepth = hasCountertopSupport ? depth + 150 : depth;
+  const fittedHeight = hasCountertopSupport ? height + 45 : height;
   const [debugOpen, setDebugOpen] = useState(false);
   const [lightSettings, setLightSettings] = useState<LightSettings>({ ...defaultLightSettings });
 
@@ -603,7 +760,12 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
             </label>
           </aside>
         )}
-        <Canvas camera={{ position: [4.7, 4.1, 5.4], fov: 38 }} shadows>
+        <Canvas
+          camera={{ position: [4.7, 4.1, 5.4], fov: 38 }}
+          dpr={[1, 2]}
+          gl={{ antialias: true }}
+          shadows
+        >
           <ambientLight intensity={lightSettings.ambientIntensity} />
           {(() => {
             const sceneLength = toScene(length);
@@ -632,8 +794,8 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
               </>
             );
           })()}
-          <Environment files="/environment/alte_veste_station_2k.hdr" environmentIntensity={0.4} />
-          <EffectComposer enableNormalPass multisampling={0}>
+          <Environment files={assetUrl("environment/alte_veste_station_2k.hdr")} environmentIntensity={0.4} />
+          <EffectComposer enableNormalPass multisampling={4}>
             <SSAO
               bias={lightSettings.ssaoBias}
               intensity={lightSettings.ssaoIntensity}
@@ -643,7 +805,16 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
               samples={lightSettings.ssaoSamples}
             />
           </EffectComposer>
-          <OrbitControls enableDamping enablePan={false} makeDefault maxDistance={maxZoomDistance} minDistance={3} target={[0, 0.45, 0]} />
+          <OrbitControls
+            enableDamping
+            enablePan={false}
+            makeDefault
+            maxDistance={maxZoomDistance}
+            maxPolarAngle={Math.PI / 2 - 0.03}
+            minDistance={3}
+            target={[0, 0.45, 0]}
+          />
+          <AutoFitCamera depth={fittedDepth} height={fittedHeight} length={fittedLength} />
         </Canvas>
       </div>
     </section>
