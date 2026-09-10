@@ -78,7 +78,7 @@ export interface SinkCartPayload {
 
 const defaultConfig: StorefrontConfig = {
   assetBaseUrl: "/",
-  modelBaseUrl: "/models",
+  modelBaseUrl: "/models-new",
   productHandle: "custom-undermount-sink",
   currency: "USD",
 };

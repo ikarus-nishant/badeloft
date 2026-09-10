@@ -268,18 +268,15 @@ function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, l
   }, [bowlDepth, bowlWidth, modelUrl, scene]);
 
   return useMemo(() => {
-    const baseGeometry = new BoxGeometry(length, height, depth);
-    baseGeometry.translate(0, height / 2, 0);
-
-    const capGeometry = new BoxGeometry(length + 0.04, countertopCapThickness, depth + 0.04);
-    capGeometry.translate(0, height + countertopCapThickness / 2, 0);
+    const totalHeight = height + countertopCapThickness;
+    const baseGeometry = new BoxGeometry(length, totalHeight, depth);
+    baseGeometry.translate(0, totalHeight / 2, 0);
 
     return {
-      base: cutGeometryWithBowls(baseGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, height),
-      cap: conformCountertopTopNormals(
-        cutGeometryWithBowls(capGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, height),
+      base: conformCountertopTopNormals(
+        cutGeometryWithBowls(baseGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, totalHeight),
       ),
-    } satisfies Record<"base" | "cap", BufferGeometry>;
+    };
   }, [bowls, cutterFootprint.depth, cutterFootprint.width, depth, height, length]);
 }
 
@@ -289,14 +286,9 @@ function CountertopModel(props: CountertopModelProps) {
   const surfaceRoughness = bowlFinish === "matte" ? 0.72 : 0.2;
 
   return (
-    <>
-      <mesh castShadow geometry={geometries.base} receiveShadow>
-        <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
-      </mesh>
-      <mesh geometry={geometries.cap} receiveShadow>
-        <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
-      </mesh>
-    </>
+    <mesh castShadow geometry={geometries.base} receiveShadow>
+      <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
+    </mesh>
   );
 }
 
@@ -349,7 +341,7 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
             material.metalness = 0.04;
             material.roughness = surfaceRoughness;
           } else if (modelPart === "drain_cap") {
-            const drainMaterial = drainMaterials[drainFinish];
+            const drainMaterial = drainMaterials[drainFinish] ?? drainMaterials.chrome;
             material.color.set(drainMaterial.color);
             material.metalness = drainMaterial.metalness;
             material.roughness = drainMaterial.roughness;
@@ -440,7 +432,7 @@ function Line({ start, end, color = "#1a1a1a" }: { start: [number, number, numbe
   }, [points]);
 
   return (
-    <line>
+    <line renderOrder={10}>
       <bufferGeometry ref={geoRef} attach="geometry" />
       <lineBasicMaterial attach="material" color={color} linewidth={2} />
     </line>
@@ -460,56 +452,108 @@ function Measurements({ show, config }: MeasurementsProps) {
   const depth = Number(dims.D || 500);
   const height = Number(dims.H || 150);
 
+  const leftInset = Math.max(0, Number(dims.L2 || 0));
+  const rightInset = Math.max(0, Number(dims.L3 || 0));
+  const rearInset = Math.max(0, Number(dims.D2 || 0));
+  const frontInset = Math.max(0, Number(dims.D3 || 0));
+
+  const sinkLength = Math.max(0, length - leftInset - rightInset);
+  const sinkDepth = Math.max(0, depth - rearInset - frontInset);
+
   const sceneLength = toScene(length);
   const sceneDepth = toScene(depth);
   const sceneHeight = Math.max(0.42, toScene(height));
 
-  const lengthInches = (length / 25.4).toFixed(1);
-  const depthInches = (depth / 25.4).toFixed(1);
-  const heightInches = (height / 25.4).toFixed(1);
+  const lengthInches = (length / 25.4).toFixed(2);
+  const depthInches = (depth / 25.4).toFixed(2);
+  const heightInches = (height / 25.4).toFixed(2);
 
-  const color = "#636363"; // Elegant slate gray for measurement lines
+  const sinkLengthInches = (sinkLength / 25.4).toFixed(2);
+  const sinkDepthInches = (sinkDepth / 25.4).toFixed(2);
+
+  const sceneLeftInset = toScene(leftInset);
+  const sceneRightInset = toScene(rightInset);
+  const sceneRearInset = toScene(rearInset);
+  const sceneFrontInset = toScene(frontInset);
+
+  const sinkStartX = -sceneLength / 2 + sceneLeftInset;
+  const sinkEndX = sceneLength / 2 - sceneRightInset;
+  const sinkCenterX = (sinkStartX + sinkEndX) / 2;
+
+  const sinkStartZ = -sceneDepth / 2 + sceneRearInset;
+  const sinkEndZ = sceneDepth / 2 - sceneFrontInset;
+  const sinkCenterZ = (sinkStartZ + sinkEndZ) / 2;
+
+  // Measurement lines and styling (previous clean slate gray UI)
+  const color = "#636363";
+  const hasCountertopSupport = config.mountingType === "countertop";
+  const floorY = hasCountertopSupport ? 0.01 : -0.05;
+  const floorLabelY = hasCountertopSupport ? 0.015 : -0.05;
+  const bottomTickY = hasCountertopSupport ? 0.01 : 0;
+  const zOverall = sceneDepth / 2 + 0.2;
+  const xOverall = sceneLength / 2 + 0.2;
+
+  // Top rim measurement lines for the sink cutout (adapts with overall height)
+  const topY = sceneHeight + countertopCapThickness;
+  const rimLineY = topY + 0.003;
+  const rimLabelY = topY + 0.01;
+  const rimOffset = 0.04;
+  const rimTick = 0.02;
+
+  const zSink = sinkEndZ + rimOffset;
+  const xSink = sinkStartX - rimOffset;
 
   return (
     <group>
-      {/* 1. Width (Length) Measurements */}
+      {/* 1. Sink Measurements on top rim with clean T-pointers and corner gap */}
       <group>
-        {/* Main Line */}
-        <Line start={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2]} end={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2]} color={color} />
-        {/* Left Tick */}
-        <Line start={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 - 0.07]} end={[-sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 + 0.07]} color={color} />
-        {/* Right Tick */}
-        <Line start={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 - 0.07]} end={[sceneLength / 2, -0.05, sceneDepth / 2 + 0.2 + 0.07]} color={color} />
-        {/* Label */}
-        <Html position={[0, -0.05, sceneDepth / 2 + 0.2]} center>
+        {/* Sink Width along front rim */}
+        <group>
+          <Line start={[sinkStartX, rimLineY, zSink]} end={[sinkEndX, rimLineY, zSink]} color={color} />
+          <Line start={[sinkStartX, rimLineY, zSink - rimTick]} end={[sinkStartX, rimLineY, zSink + rimTick]} color={color} />
+          <Line start={[sinkEndX, rimLineY, zSink - rimTick]} end={[sinkEndX, rimLineY, zSink + rimTick]} color={color} />
+          <Html position={[sinkCenterX, rimLabelY, zSink]} center>
+            <div className="measurement-label">{sinkLengthInches} in</div>
+          </Html>
+        </group>
+
+        {/* Sink Depth along left rim */}
+        <group>
+          <Line start={[xSink, rimLineY, sinkStartZ]} end={[xSink, rimLineY, sinkEndZ]} color={color} />
+          <Line start={[xSink - rimTick, rimLineY, sinkStartZ]} end={[xSink + rimTick, rimLineY, sinkStartZ]} color={color} />
+          <Line start={[xSink - rimTick, rimLineY, sinkEndZ]} end={[xSink + rimTick, rimLineY, sinkEndZ]} color={color} />
+          <Html position={[xSink, rimLabelY, sinkCenterZ]} center>
+            <div className="measurement-label">{sinkDepthInches} in</div>
+          </Html>
+        </group>
+      </group>
+
+      {/* 2. Overall Width (Length) on floor or countertop */}
+      <group>
+        <Line start={[-sceneLength / 2, floorY, zOverall]} end={[sceneLength / 2, floorY, zOverall]} color={color} />
+        <Line start={[-sceneLength / 2, floorY, zOverall - 0.07]} end={[-sceneLength / 2, floorY, zOverall + 0.07]} color={color} />
+        <Line start={[sceneLength / 2, floorY, zOverall - 0.07]} end={[sceneLength / 2, floorY, zOverall + 0.07]} color={color} />
+        <Html position={[0, floorLabelY, zOverall]} center>
           <div className="measurement-label">{lengthInches} in</div>
         </Html>
       </group>
 
-      {/* 2. Depth Measurements */}
+      {/* 3. Overall Depth on floor or countertop */}
       <group>
-        {/* Main Line */}
-        <Line start={[sceneLength / 2 + 0.2, -0.05, -sceneDepth / 2]} end={[sceneLength / 2 + 0.2, -0.05, sceneDepth / 2]} color={color} />
-        {/* Back Tick */}
-        <Line start={[sceneLength / 2 + 0.12, -0.05, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, -0.05, -sceneDepth / 2]} color={color} />
-        {/* Front Tick */}
-        <Line start={[sceneLength / 2 + 0.12, -0.05, sceneDepth / 2]} end={[sceneLength / 2 + 0.28, -0.05, sceneDepth / 2]} color={color} />
-        {/* Label */}
-        <Html position={[sceneLength / 2 + 0.2, -0.05, 0]} center>
+        <Line start={[xOverall, floorY, -sceneDepth / 2]} end={[xOverall, floorY, sceneDepth / 2]} color={color} />
+        <Line start={[xOverall - 0.07, floorY, -sceneDepth / 2]} end={[xOverall + 0.07, floorY, -sceneDepth / 2]} color={color} />
+        <Line start={[xOverall - 0.07, floorY, sceneDepth / 2]} end={[xOverall + 0.07, floorY, sceneDepth / 2]} color={color} />
+        <Html position={[xOverall, floorLabelY, 0]} center>
           <div className="measurement-label">{depthInches} in</div>
         </Html>
       </group>
 
-      {/* 3. Height Measurements */}
+      {/* 4. Overall Height */}
       <group>
-        {/* Main Line */}
-        <Line start={[sceneLength / 2 + 0.2, 0, -sceneDepth / 2]} end={[sceneLength / 2 + 0.2, sceneHeight, -sceneDepth / 2]} color={color} />
-        {/* Bottom Tick */}
-        <Line start={[sceneLength / 2 + 0.12, 0, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, 0, -sceneDepth / 2]} color={color} />
-        {/* Top Tick */}
-        <Line start={[sceneLength / 2 + 0.12, sceneHeight, -sceneDepth / 2]} end={[sceneLength / 2 + 0.28, sceneHeight, -sceneDepth / 2]} color={color} />
-        {/* Label */}
-        <Html position={[sceneLength / 2 + 0.2, sceneHeight / 2, -sceneDepth / 2]} center>
+        <Line start={[xOverall, bottomTickY, -sceneDepth / 2]} end={[xOverall, sceneHeight, -sceneDepth / 2]} color={color} />
+        <Line start={[xOverall - 0.07, bottomTickY, -sceneDepth / 2]} end={[xOverall + 0.07, bottomTickY, -sceneDepth / 2]} color={color} />
+        <Line start={[xOverall - 0.07, sceneHeight, -sceneDepth / 2]} end={[xOverall + 0.07, sceneHeight, -sceneDepth / 2]} color={color} />
+        <Html position={[xOverall, sceneHeight / 2, -sceneDepth / 2]} center>
           <div className="measurement-label">{heightInches} in</div>
         </Html>
       </group>
@@ -837,7 +881,7 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
                   shadow-normalBias={lightSettings.shadowNormalBias}
                   shadow-radius={lightSettings.shadowRadius}
                 />
-                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish }} arModelRef={arModelRef} config={config} showDimensions={!!showDimensions} />
+                <SinkModel appearance={{ bowlColor, bowlFinish, drainFinish: drainFinish ?? "chrome" }} arModelRef={arModelRef} config={config} showDimensions={!!showDimensions} />
                 <ArModelExporter modelRef={arModelRef} onModelReady={onArModelReady} revision={arRevision} />
                 <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
                   <planeGeometry args={[Math.max(20, sceneLength * 2.5), 15]} />

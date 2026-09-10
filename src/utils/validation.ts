@@ -22,13 +22,21 @@ export function validateConfiguration(config: SinkConfiguration): ValidationErro
     }
   });
 
-  if (mountingType === "wall_mounted") {
-    if (!dimensions.L2 || dimensions.L2 < 100) errors.push({ field: "L2", message: "L2 must be at least 100 mm for bracket space." });
-    if (!dimensions.L3 || dimensions.L3 < 100) errors.push({ field: "L3", message: "L3 must be at least 100 mm for bracket space." });
+  if (!dimensions.L2 || dimensions.L2 < 100) {
+    errors.push({ field: "L2", message: "Left offset must be at least 3.94 in (100 mm)." });
+  }
+  if (!dimensions.L3 || dimensions.L3 < 100) {
+    errors.push({ field: "L3", message: "Right offset must be at least 3.94 in (100 mm)." });
+  }
+  if (bowlQuantity && bowlQuantity !== "single" && (!dimensions.bowlSpacing || dimensions.bowlSpacing < 100)) {
+    errors.push({ field: "bowlSpacing", message: "Bowl spacing must be at least 3.94 in (100 mm)." });
   }
 
-  if (!dimensions.D3 || dimensions.D3 < 30) {
-    errors.push({ field: "D3", message: "D3 must be at least 30 mm." });
+  if (!dimensions.D3 || dimensions.D3 < 50) {
+    errors.push({ field: "D3", message: "Front offset must be at least 1.9685 in (50 mm)." });
+  }
+  if (!dimensions.D2 || dimensions.D2 < 50) {
+    errors.push({ field: "D2", message: "Rear offset must be at least 1.9685 in (50 mm)." });
   }
 
   return errors;

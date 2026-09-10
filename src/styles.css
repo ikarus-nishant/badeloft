@@ -257,7 +257,7 @@ button {
 }
 
 .stage-canvas {
-  background: radial-gradient(circle at center, #f7f8f6 30%, #e2e4e0 100%);
+  background: linear-gradient(180deg, rgba(135, 130, 101, 0.2) 0%, rgba(159, 155, 132, 0.2) 100%), #ffffff;
   border-radius: 8px;
   height: 100%;
   overflow: hidden;
@@ -929,7 +929,7 @@ button {
 .cart-footer div {
   align-items: center;
   display: flex;
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 700;
   justify-content: space-between;
 }
@@ -1953,6 +1953,16 @@ svg text {
   margin-top: 12px;
 }
 
+.mounting-card-grid .mounting-tooltip-wrapper {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.mounting-card-grid .mounting-tooltip-wrapper .mounting-card {
+  height: 100%;
+}
+
 .mounting-card {
   background: #fbfaf8;
   border: 1.5px solid #e5e3df;
@@ -2015,6 +2025,7 @@ svg text {
   display: flex;
 }
 
+.bowl-model-card-grid button.reusable-card,
 .bowl-model-card-grid .tooltip-wrapper button.reusable-card {
   width: 100%;
   height: 100%;
@@ -2095,6 +2106,122 @@ svg text {
   border-right: 6px solid transparent;
   border-top: 6px solid #1a1a1a;
 }
+
+/* Add to Cart Disabled States */
+.cart-footer .add-cart-button.disabled,
+.cart-footer .add-cart-button[aria-disabled="true"],
+.summary-add-cart.disabled,
+.summary-add-cart[aria-disabled="true"] {
+  background: #e2e4e8;
+  border-color: #d1d5dc;
+  color: #8c939f;
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.cart-footer .add-cart-button.disabled:hover,
+.cart-footer .add-cart-button[aria-disabled="true"]:hover,
+.summary-add-cart.disabled:hover,
+.summary-add-cart[aria-disabled="true"]:hover {
+  background: #e2e4e8;
+  border-color: #d1d5dc;
+  color: #8c939f;
+}
+
+/* Cart Actions Tooltip Alignment */
+.cart-footer .cart-actions .cart-tooltip-wrapper {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.cart-footer .cart-actions .cart-tooltip-wrapper .add-cart-button {
+  width: 100%;
+  height: 100%;
+}
+
+.cart-footer .cart-actions .cart-tooltip-wrapper .tooltip-balloon {
+  left: auto;
+  right: 0;
+  transform: translate(0, -8px);
+  white-space: normal;
+  width: max-content;
+  max-width: 250px;
+  text-align: center;
+  line-height: 1.35;
+  padding: 8px 12px;
+}
+
+.cart-footer .cart-actions .cart-tooltip-wrapper .tooltip-balloon.visible {
+  transform: translate(0, 0);
+}
+
+.cart-footer .cart-actions .cart-tooltip-wrapper .tooltip-arrow {
+  left: auto;
+  right: 48px;
+  transform: none;
+}
+
+/* Summary Dialog Tooltip Alignment */
+.summary-footer .summary-cart-tooltip-wrapper {
+  display: flex;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.summary-footer .summary-cart-tooltip-wrapper .summary-add-cart {
+  margin-top: 0;
+  width: 100%;
+}
+
+.summary-footer .summary-cart-tooltip-wrapper .tooltip-balloon {
+  left: 50%;
+  transform: translate(-50%, -8px);
+  white-space: normal;
+  width: max-content;
+  max-width: 290px;
+  text-align: center;
+  line-height: 1.35;
+  padding: 8px 14px;
+}
+
+.summary-footer .summary-cart-tooltip-wrapper .tooltip-balloon.visible {
+  transform: translate(-50%, 0);
+}
+
+/* Tooltip Shake Micro-Animations */
+@keyframes tooltip-shake {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  20%, 60% {
+    transform: translate(-5px, 0);
+  }
+  40%, 80% {
+    transform: translate(5px, 0);
+  }
+}
+
+@keyframes tooltip-shake-centered {
+  0%, 100% {
+    transform: translate(-50%, 0);
+  }
+  20%, 60% {
+    transform: translate(calc(-50% - 5px), 0);
+  }
+  40%, 80% {
+    transform: translate(calc(-50% + 5px), 0);
+  }
+}
+
+.cart-footer .cart-actions .cart-tooltip-wrapper .tooltip-balloon.visible.shake {
+  animation: tooltip-shake 0.4s ease-in-out;
+}
+
+.summary-footer .summary-cart-tooltip-wrapper .tooltip-balloon.visible.shake {
+  animation: tooltip-shake-centered 0.4s ease-in-out;
+}
+
 
 .stage {
   position: relative;

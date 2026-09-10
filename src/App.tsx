@@ -10,6 +10,8 @@ import { Tooltip } from "./components/Tooltip";
 import { assetUrl, formatCurrency, handoffAddToCart, storefrontConfig, type SinkCartPayload } from "./integrations/storefront";
 
 const selectedStartBowl = bowlOptions.find((bowl) => bowl.id === "UB-04-M") ?? bowlOptions[0];
+const defaultInitialWidth = 30 * 25.4; // 30 inches (762 mm)
+const defaultInitialOffset = Math.round((defaultInitialWidth - selectedStartBowl.size.length) / 2); // 131 mm
 
 const initialConfig: SinkConfiguration = {
   bowl: selectedStartBowl,
@@ -17,8 +19,8 @@ const initialConfig: SinkConfiguration = {
   mountingType: "wall_mounted",
   sinkType: "CUSTOM_SINGLE",
   dimensions: {
-    L2: 100,
-    L3: 100,
+    L2: defaultInitialOffset,
+    L3: defaultInitialOffset,
     D2: 100,
     D3: 50,
     H: selectedStartBowl.size.height,
@@ -37,10 +39,10 @@ type BowlColor = "white" | "black" | "gray";
 type DrainFinish = "chrome" | "black" | "brushed-nickel" | "glossy-white" | "matte-white";
 
 interface HistorySnapshot {
-  bowlColor: BowlColor;
+  bowlColor?: BowlColor;
   bowlFinish: BowlFinish;
   config: SinkConfiguration;
-  drainFinish: DrainFinish;
+  drainFinish?: DrainFinish;
 }
 
 interface ConfiguratorHistory {
@@ -56,11 +58,11 @@ const bowlColorOptions: Array<{ color: string; id: BowlColor; label: string }> =
 ];
 
 const drainFinishOptions: Array<{ id: DrainFinish; label: string; price: number }> = [
+  { id: "chrome", label: "Chrome", price: 0 },
   { id: "black", label: "Black", price: 29 },
+  { id: "brushed-nickel", label: "Brushed Nickel", price: 29 },
   { id: "glossy-white", label: "Glossy White", price: 29 },
   { id: "matte-white", label: "Matte White", price: 29 },
-  { id: "chrome", label: "Chrome", price: 29 },
-  { id: "brushed-nickel", label: "Brushed Nickel", price: 29 },
 ];
 
 const countByQuantity: Record<BowlQuantity, number> = {
@@ -159,8 +161,8 @@ function App() {
   const [showBuildSummary, setShowBuildSummary] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [bowlFinish, setBowlFinish] = useState<BowlFinish>("glossy");
-  const [bowlColor, setBowlColor] = useState<BowlColor>("gray");
-  const [drainFinish, setDrainFinish] = useState<DrainFinish>("chrome");
+  const [bowlColor, setBowlColor] = useState<BowlColor | undefined>(undefined);
+  const [drainFinish, setDrainFinish] = useState<DrainFinish | undefined>(undefined);
   const [showDimensions, setShowDimensions] = useState(false);
   const [arModelLoaded, setArModelLoaded] = useState(false);
   const [arModelUrl, setArModelUrl] = useState<string>();
@@ -184,16 +186,27 @@ function App() {
   const bowlCount = countByQuantity[config.bowlQuantity ?? "single"];
   const selectedQuantityIndex = quantityOptions.findIndex((item) => item.quantity === config.bowlQuantity);
   const selectedFinishIndex = (["glossy", "matte"] as const).indexOf(bowlFinish);
-  const fixedSinkWidth = (bowlCount * (config.bowl?.size.length ?? 500)) + (bowlCount > 1 ? (bowlCount - 1) * Number(config.dimensions.bowlSpacing ?? 100) : 0);
+  const minLeftRight = 100; // 3.94 inches (100 mm)
+  const minSpacing = 100; // 3.94 inches (100 mm)
+  const minFrontRear = 50; // 1.9685 inches (50 mm)
+  const bowlLength = config.bowl?.size.length ?? 500;
+  const totalBowlsLength = bowlCount * bowlLength;
+  const gaps = bowlCount > 1 ? bowlCount - 1 : 0;
+  const minOverallWidth = totalBowlsLength + (gaps * minSpacing) + (minLeftRight * 2);
+  const extraWidthAllowance = 15 * 25.4; // 15 inches (381 mm) allowance above minimum for XL+
+  const maximumOverallWidth = Math.max(3000, minOverallWidth + extraWidthAllowance);
+  const maximumOverallDepth = 600; // 23.622 inches (600 mm)
+  const currentSpacing = gaps > 0 ? Math.max(minSpacing, Number(config.dimensions.bowlSpacing ?? minSpacing)) : 0;
+  const fixedSinkWidth = totalBowlsLength + (gaps * currentSpacing);
   const fixedSinkDepth = config.bowl?.size.depth ?? 410;
-  const minLeftRight = config.mountingType === "wall_mounted" ? 100 : 50;
-  const minOverallWidth = fixedSinkWidth + (minLeftRight * 2);
-  const minOverallDepth = fixedSinkDepth + 50 + 100; // Front is 50, Rear is 100
-  const maximumOverallWidth = 3000;
-  const maximumOverallDepth = 600;
-  const selectedBowlColor = bowlColorOptions.find((option) => option.id === bowlColor)?.color ?? "#f7f7f5";
-  const selectedBowlColorLabel = bowlColorOptions.find((option) => option.id === bowlColor)?.label ?? "White";
-  const selectedDrainFinish = drainFinishOptions.find((option) => option.id === drainFinish) ?? drainFinishOptions[0];
+  const minOverallDepth = fixedSinkDepth + (minFrontRear * 2);
+  const maxSpacingLimit = gaps > 0
+    ? Math.max(minSpacing, Math.floor((maximumOverallWidth - totalBowlsLength - (minLeftRight * 2)) / gaps))
+    : minSpacing;
+  const maximumOverallHeight = 10 * 25.4; // 10 inches (254 mm)
+  const selectedBowlColor = (bowlColor && bowlColorOptions.find((option) => option.id === bowlColor)?.color) ?? "#f7f7f5";
+  const selectedBowlColorLabel = (bowlColor && bowlColorOptions.find((option) => option.id === bowlColor)?.label) ?? "";
+  const selectedDrainFinish = drainFinish ? drainFinishOptions.find((option) => option.id === drainFinish) : undefined;
   const bowlId = config.bowl?.id ?? "UB-01";
   const selectedBowlType = getBowlTypeFromId(bowlId);
   const { shape: selectedShape, size: selectedSize } = getShapeAndSizeFromBowlId(bowlId);
@@ -201,22 +214,44 @@ function App() {
   // Model-specific pricing variables
   const lengthInMeters = (dims.L ?? 0) / 1000;
   const baseSinkPrice = lengthInMeters * 210;
-  
+
+  const depthInMeters = (dims.D ?? 0) / 1000;
+  const baseDepthPrice = depthInMeters * 210;
+
   const extraBowlCount = bowlCount > 1 ? bowlCount - 1 : 0;
   const extraBowlPrice = extraBowlCount * 80;
   
-  const wallMountPrice = config.mountingType === "wall_mounted" ? 30 : 0;
   const packingPrice = 50;
 
-  const heightInMm = dims.H ?? config.bowl?.size.height ?? 0;
-  const extraHeightPrice = heightInMm > 200 ? 50 * lengthInMeters : 0;
+  const heightInMeters = (dims.H ?? config.bowl?.size.height ?? 0) / 1000;
+  const baseHeightPrice = heightInMeters * 210;
 
-  const factoryCost = baseSinkPrice + extraBowlPrice + wallMountPrice + packingPrice + extraHeightPrice;
-  const buildSubtotal = Math.round(factoryCost * 1.85);
-  const bowlColorPrice = bowlColor === "white" ? 0 : (config.bowl?.colorPrice ?? 100);
-  const drainCapPrice = selectedDrainFinish.price;
-  const finishSubtotal = bowlColorPrice + drainCapPrice;
+  const widthInInches = Number(((dims.L ?? 0) / 25.4).toFixed(2));
+  const extraWidthPrice = widthInInches >= 40 ? 50 : 0;
+
+  const wallMountPrice = bowlCount === 1 ? 150 : (bowlCount === 2 ? 200 : 250);
+  const installationPrice = config.mountingType === "wall_mounted" ? wallMountPrice : 0;
+
+  const factoryCost = baseSinkPrice + baseDepthPrice + baseHeightPrice + extraBowlPrice + packingPrice;
+  const baseBuildSubtotal = Math.round(factoryCost * 1.85) + extraWidthPrice + installationPrice;
+  const buildSubtotal = Math.round(baseBuildSubtotal * 1.7);
+  const bowlColorPrice = bowlColor ? (bowlColor === "white" ? 0 : (config.bowl?.colorPrice ?? 100)) : 0;
+  const drainCapPrice = selectedDrainFinish ? selectedDrainFinish.price : 0;
+  const baseFinishSubtotal = bowlColorPrice + drainCapPrice;
+  const finishSubtotal = Math.round(baseFinishSubtotal * 1.7);
   const total = buildSubtotal + finishSubtotal;
+
+  const hasAllSelections = Boolean(
+    config.mountingType &&
+    config.bowl &&
+    config.bowlQuantity &&
+    bowlFinish &&
+    bowlColor &&
+    drainFinish
+  );
+
+  const isCartDisabled = activeBuildMode !== "finish" || !hasAllSelections;
+  const cartDisabledTooltip = "One more step - select your sink finish to add to cart";
 
   const selectedDrainEdge: "left" | "rear" | "right" = bowlId === "UB-04-RL"
     ? "left"
@@ -379,39 +414,269 @@ function App() {
 
   const canUndo = history.current.past.length > 0;
   const canRedo = history.current.future.length > 0;
-
   const updateBowl = (bowl: BowlOption) => {
-    setConfig((previous) => ({
-      ...previous,
-      bowl,
-      dimensions: {
-        ...previous.dimensions,
-        H: bowl.size.height,
-      },
-    }));
+    setConfig((previous) => {
+      const count = countByQuantity[previous.bowlQuantity ?? "single"];
+      const gaps = count > 1 ? count - 1 : 0;
+      const totalBowlsLength = count * bowl.size.length;
+      const minRequired = totalBowlsLength + (gaps * minSpacing) + (minLeftRight * 2);
+      const maxOverallWidth = Math.max(3000, minRequired + (15 * 25.4));
+
+      let spacing = gaps > 0 ? Math.max(minSpacing, Number(previous.dimensions.bowlSpacing ?? minSpacing)) : 0;
+      if (gaps > 0) {
+        const maxSpacingForBowl = Math.max(minSpacing, Math.floor((maxOverallWidth - totalBowlsLength - (minLeftRight * 2)) / gaps));
+        spacing = clamp(spacing, minSpacing, maxSpacingForBowl);
+      }
+
+      let fixedWidth = totalBowlsLength + (gaps * spacing);
+      let left = Math.max(minLeftRight, Number(previous.dimensions.L2 ?? minLeftRight));
+      let right = Math.max(minLeftRight, Number(previous.dimensions.L3 ?? minLeftRight));
+
+      if (left + right + fixedWidth > maxOverallWidth) {
+        const [nextLeft, nextRight] = distributeOffsetDelta(maxOverallWidth, fixedWidth, left, right, minLeftRight, minLeftRight);
+        left = nextLeft;
+        right = nextRight;
+      }
+
+      let front = Math.max(minFrontRear, Number(previous.dimensions.D3 ?? minFrontRear));
+      let rear = Math.max(minFrontRear, Number(previous.dimensions.D2 ?? minFrontRear));
+      if (front + rear + bowl.size.depth > maximumOverallDepth) {
+        const [nextFront, nextRear] = distributeOffsetDelta(maximumOverallDepth, bowl.size.depth, front, rear, minFrontRear, minFrontRear);
+        front = nextFront;
+        rear = nextRear;
+      }
+
+      return {
+        ...previous,
+        bowl,
+        dimensions: {
+          ...previous.dimensions,
+          L2: left,
+          L3: right,
+          D3: front,
+          D2: rear,
+          H: bowl.size.height,
+          ...(gaps > 0 ? { bowlSpacing: spacing } : {}),
+        },
+      };
+    });
   };
 
   const updateQuantity = (quantity: BowlQuantity) => {
-    setConfig((previous) => ({
-      ...previous,
-      bowlQuantity: quantity,
-      sinkType: quantityToSinkType(quantity),
-    }));
+    setConfig((previous) => {
+      const nextCount = countByQuantity[quantity];
+      const nextGaps = nextCount > 1 ? nextCount - 1 : 0;
+      const bowlLen = previous.bowl?.size.length ?? 500;
+      const nextBowlsLength = nextCount * bowlLen;
+      const nextMinRequired = nextBowlsLength + (nextGaps * minSpacing) + (minLeftRight * 2);
+      const maxOverallWidth = Math.max(3000, nextMinRequired + (15 * 25.4));
+
+      let nextSpacing = nextGaps > 0 ? Math.max(minSpacing, Number(previous.dimensions.bowlSpacing ?? minSpacing)) : 0;
+
+      if (nextGaps > 0) {
+        const maxSpacingForNew = Math.max(minSpacing, Math.floor((maxOverallWidth - nextBowlsLength - (minLeftRight * 2)) / nextGaps));
+        nextSpacing = clamp(nextSpacing, minSpacing, maxSpacingForNew);
+      }
+
+      const newFixedWidth = nextBowlsLength + (nextGaps * nextSpacing);
+      let left = Math.max(minLeftRight, Number(previous.dimensions.L2 ?? minLeftRight));
+      let right = Math.max(minLeftRight, Number(previous.dimensions.L3 ?? minLeftRight));
+
+      if (left + right + newFixedWidth > maxOverallWidth) {
+        const [nextLeft, nextRight] = distributeOffsetDelta(maxOverallWidth, newFixedWidth, left, right, minLeftRight, minLeftRight);
+        left = nextLeft;
+        right = nextRight;
+      }
+
+      return {
+        ...previous,
+        bowlQuantity: quantity,
+        sinkType: quantityToSinkType(quantity),
+        dimensions: {
+          ...previous.dimensions,
+          L2: left,
+          L3: right,
+          ...(nextGaps > 0 ? { bowlSpacing: nextSpacing } : {}),
+        },
+      };
+    });
   };
 
   const updateDimension = (field: keyof SinkDimensions, value: number) => {
     setConfig((previous) => {
+      const count = countByQuantity[previous.bowlQuantity ?? "single"];
+      const gaps = count > 1 ? count - 1 : 0;
+      const bowlLen = previous.bowl?.size.length ?? 500;
+      const totalBowlsLength = count * bowlLen;
+      const minRequired = totalBowlsLength + (gaps * minSpacing) + (minLeftRight * 2);
+      const maxOverall = Math.max(3000, minRequired + (15 * 25.4));
+      let currentSpacing = gaps > 0 ? Math.max(minSpacing, Number(previous.dimensions.bowlSpacing ?? minSpacing)) : 0;
+
+      if (field === "bowlSpacing") {
+        if (gaps === 0) return previous;
+        const maxSpacing = Math.max(minSpacing, Math.floor((maxOverall - totalBowlsLength - (minLeftRight * 2)) / gaps));
+        const targetSpacing = clamp(value, minSpacing, maxSpacing);
+        const newFixedWidth = totalBowlsLength + (gaps * targetSpacing);
+        const currentL2 = Math.max(minLeftRight, Number(previous.dimensions.L2 ?? minLeftRight));
+        const currentL3 = Math.max(minLeftRight, Number(previous.dimensions.L3 ?? minLeftRight));
+
+        let nextL2 = currentL2;
+        let nextL3 = currentL3;
+
+        // If total width exceeds maxOverall, reduce Left and Right down towards minLeftRight
+        if (newFixedWidth + nextL2 + nextL3 > maxOverall) {
+          const [adjL2, adjL3] = distributeOffsetDelta(
+            maxOverall,
+            newFixedWidth,
+            currentL2,
+            currentL3,
+            minLeftRight,
+            minLeftRight
+          );
+          nextL2 = adjL2;
+          nextL3 = adjL3;
+        }
+
+        return {
+          ...previous,
+          dimensions: {
+            ...previous.dimensions,
+            bowlSpacing: targetSpacing,
+            L2: nextL2,
+            L3: nextL3,
+          },
+        };
+      }
+
+      if (field === "L2") {
+        let fixedWidth = totalBowlsLength + (gaps * currentSpacing);
+        const currentL3 = Math.max(minLeftRight, Number(previous.dimensions.L3 ?? minLeftRight));
+        let targetL2 = Math.max(minLeftRight, value);
+        let nextL3 = currentL3;
+
+        // If total width exceeds maxOverall, first reduce Right (L3) down to minimum
+        if (targetL2 + nextL3 + fixedWidth > maxOverall) {
+          nextL3 = maxOverall - fixedWidth - targetL2;
+          if (nextL3 < minLeftRight) {
+            nextL3 = minLeftRight;
+            // If L3 hit minimum and we have multiple bowls with spacing > minSpacing,
+            // reduce spacing down towards minSpacing
+            if (gaps > 0 && currentSpacing > minSpacing) {
+              const excess = (targetL2 + nextL3 + fixedWidth) - maxOverall;
+              const maxSpacingReduction = currentSpacing - minSpacing;
+              const neededSpacingReduction = excess / gaps;
+              const actualReduction = Math.min(maxSpacingReduction, neededSpacingReduction);
+              currentSpacing = currentSpacing - actualReduction;
+              fixedWidth = totalBowlsLength + (gaps * currentSpacing);
+              targetL2 = Math.min(targetL2, maxOverall - fixedWidth - nextL3);
+            } else {
+              targetL2 = maxOverall - fixedWidth - minLeftRight;
+            }
+          }
+        }
+
+        return {
+          ...previous,
+          dimensions: {
+            ...previous.dimensions,
+            L2: Math.max(minLeftRight, targetL2),
+            L3: Math.max(minLeftRight, nextL3),
+            ...(gaps > 0 ? { bowlSpacing: currentSpacing } : {}),
+          },
+        };
+      }
+
+      if (field === "L3") {
+        let fixedWidth = totalBowlsLength + (gaps * currentSpacing);
+        const currentL2 = Math.max(minLeftRight, Number(previous.dimensions.L2 ?? minLeftRight));
+        let targetL3 = Math.max(minLeftRight, value);
+        let nextL2 = currentL2;
+
+        // If total width exceeds maxOverall, first reduce Left (L2) down to minimum
+        if (nextL2 + targetL3 + fixedWidth > maxOverall) {
+          nextL2 = maxOverall - fixedWidth - targetL3;
+          if (nextL2 < minLeftRight) {
+            nextL2 = minLeftRight;
+            // If L2 hit minimum and we have multiple bowls with spacing > minSpacing,
+            // reduce spacing down towards minSpacing
+            if (gaps > 0 && currentSpacing > minSpacing) {
+              const excess = (nextL2 + targetL3 + fixedWidth) - maxOverall;
+              const maxSpacingReduction = currentSpacing - minSpacing;
+              const neededSpacingReduction = excess / gaps;
+              const actualReduction = Math.min(maxSpacingReduction, neededSpacingReduction);
+              currentSpacing = currentSpacing - actualReduction;
+              fixedWidth = totalBowlsLength + (gaps * currentSpacing);
+              targetL3 = Math.min(targetL3, maxOverall - fixedWidth - nextL2);
+            } else {
+              targetL3 = maxOverall - fixedWidth - minLeftRight;
+            }
+          }
+        }
+
+        return {
+          ...previous,
+          dimensions: {
+            ...previous.dimensions,
+            L2: Math.max(minLeftRight, nextL2),
+            L3: Math.max(minLeftRight, targetL3),
+            ...(gaps > 0 ? { bowlSpacing: currentSpacing } : {}),
+          },
+        };
+      }
+
+      if (field === "D3") {
+        const bowlDepth = previous.bowl?.size.depth ?? 410;
+        const currentD2 = Math.max(minFrontRear, Number(previous.dimensions.D2 ?? minFrontRear));
+        let targetD3 = Math.max(minFrontRear, value);
+        let nextD2 = currentD2;
+
+        // If total depth exceeds 23.622 in (maximumOverallDepth), reduce Rear (D2) down to minimum
+        if (targetD3 + nextD2 + bowlDepth > maximumOverallDepth) {
+          nextD2 = maximumOverallDepth - bowlDepth - targetD3;
+          if (nextD2 < minFrontRear) {
+            nextD2 = minFrontRear;
+            targetD3 = maximumOverallDepth - bowlDepth - minFrontRear;
+          }
+        }
+
+        return {
+          ...previous,
+          dimensions: {
+            ...previous.dimensions,
+            D3: Math.max(minFrontRear, targetD3),
+            D2: Math.max(minFrontRear, nextD2),
+          },
+        };
+      }
+
+      if (field === "D2") {
+        const bowlDepth = previous.bowl?.size.depth ?? 410;
+        const currentD3 = Math.max(minFrontRear, Number(previous.dimensions.D3 ?? minFrontRear));
+        let targetD2 = Math.max(minFrontRear, value);
+        let nextD3 = currentD3;
+
+        // If total depth exceeds 23.622 in (maximumOverallDepth), reduce Front (D3) down to minimum
+        if (nextD3 + targetD2 + bowlDepth > maximumOverallDepth) {
+          nextD3 = maximumOverallDepth - bowlDepth - targetD2;
+          if (nextD3 < minFrontRear) {
+            nextD3 = minFrontRear;
+            targetD2 = maximumOverallDepth - bowlDepth - minFrontRear;
+          }
+        }
+
+        return {
+          ...previous,
+          dimensions: {
+            ...previous.dimensions,
+            D2: Math.max(minFrontRear, targetD2),
+            D3: Math.max(minFrontRear, nextD3),
+          },
+        };
+      }
+
       let clampedValue = value;
-      if (field === "L2" || field === "L3") {
-        clampedValue = Math.max(value, previous.mountingType === "wall_mounted" ? 100 : 50);
-      } else if (field === "D3") {
-        clampedValue = Math.max(value, 50);
-      } else if (field === "D2") {
-        clampedValue = Math.max(value, 100);
-      } else if (field === "bowlSpacing") {
-        clampedValue = Math.max(value, 100);
-      } else if (field === "H") {
-        clampedValue = Math.max(value, previous.bowl?.size.height ?? 80);
+      if (field === "H") {
+        clampedValue = Math.min(Math.max(value, previous.bowl?.size.height ?? 80), maximumOverallHeight);
       }
 
       return {
@@ -425,33 +690,32 @@ function App() {
   };
 
   const updateMountingType = (mountingType: MountingType) => {
-    setConfig((previous) => {
-      const minLeftRight = mountingType === "wall_mounted" ? 100 : 50;
-      const currentL2 = Number(previous.dimensions.L2 ?? 0);
-      const currentL3 = Number(previous.dimensions.L3 ?? 0);
-      
-      return {
-        ...previous,
-        mountingType,
-        dimensions: {
-          ...previous.dimensions,
-          L2: Math.max(currentL2, minLeftRight),
-          L3: Math.max(currentL3, minLeftRight),
-        },
-      };
-    });
+    setConfig((previous) => ({
+      ...previous,
+      mountingType,
+    }));
   };
 
   const updateOverallWidth = (value: number) => {
     setConfig((previous) => {
-      const bowlWidth = previous.bowl?.size.length ?? 500;
       const count = countByQuantity[previous.bowlQuantity ?? "single"];
-      const gap = count > 1 ? Number(previous.dimensions.bowlSpacing ?? 100) : 0;
-      const fixedWidth = (count * bowlWidth) + ((count - 1) * gap);
-      const left = Number(previous.dimensions.L2 ?? 0);
-      const right = Number(previous.dimensions.L3 ?? 0);
-      const minLeftRight = previous.mountingType === "wall_mounted" ? 100 : 50;
-      const [nextLeft, nextRight] = distributeOffsetDelta(value, fixedWidth, left, right, minLeftRight, minLeftRight);
+      const gaps = count > 1 ? count - 1 : 0;
+      const bowlLen = previous.bowl?.size.length ?? 500;
+      const totalBowlsLength = count * bowlLen;
+      const minPossibleWidth = totalBowlsLength + (gaps * minSpacing) + (minLeftRight * 2);
+      const maxOverall = Math.max(3000, minPossibleWidth + (15 * 25.4));
+      const clampedValue = Math.min(maxOverall, Math.max(minPossibleWidth, value));
+      let spacing = gaps > 0 ? Math.max(minSpacing, Number(previous.dimensions.bowlSpacing ?? minSpacing)) : 0;
+
+      let fixedWidth = totalBowlsLength + (gaps * spacing);
+      if (gaps > 0 && clampedValue < fixedWidth + (minLeftRight * 2)) {
+        spacing = Math.max(minSpacing, Math.floor((clampedValue - totalBowlsLength - (minLeftRight * 2)) / gaps));
+        fixedWidth = totalBowlsLength + (gaps * spacing);
+      }
+
+      const left = Number(previous.dimensions.L2 ?? minLeftRight);
+      const right = Number(previous.dimensions.L3 ?? minLeftRight);
+      const [nextLeft, nextRight] = distributeOffsetDelta(clampedValue, fixedWidth, left, right, minLeftRight, minLeftRight);
 
       return {
         ...previous,
@@ -459,6 +723,7 @@ function App() {
           ...previous.dimensions,
           L2: nextLeft,
           L3: nextRight,
+          ...(gaps > 0 ? { bowlSpacing: spacing } : {}),
         },
       };
     });
@@ -467,16 +732,18 @@ function App() {
   const updateOverallDepth = (value: number) => {
     setConfig((previous) => {
       const bowlDepth = previous.bowl?.size.depth ?? 410;
-      const front = Number(previous.dimensions.D3 ?? 0);
-      const rear = Number(previous.dimensions.D2 ?? 0);
-      const [nextFront, nextRear] = distributeOffsetDelta(value, bowlDepth, front, rear, 50, 100);
+      const minPossibleDepth = bowlDepth + (minFrontRear * 2);
+      const clampedValue = Math.min(maximumOverallDepth, Math.max(minPossibleDepth, value));
+      const front = Math.max(minFrontRear, Number(previous.dimensions.D3 ?? minFrontRear));
+      const rear = Math.max(minFrontRear, Number(previous.dimensions.D2 ?? minFrontRear));
+      const [nextFront, nextRear] = distributeOffsetDelta(clampedValue, bowlDepth, front, rear, minFrontRear, minFrontRear);
 
       return {
         ...previous,
         dimensions: {
           ...previous.dimensions,
-          D2: nextRear,
           D3: nextFront,
+          D2: nextRear,
         },
       };
     });
@@ -528,6 +795,8 @@ function App() {
   };
 
   const handleAddToCart = () => {
+    if (isCartDisabled) return;
+    if (!bowlColor || !drainFinish) return;
     const bowl = config.bowl ?? selectedStartBowl;
     const width = Number(dims.L ?? 0);
     const depth = Number(dims.D ?? 0);
@@ -663,25 +932,31 @@ function App() {
               <section className="control-section">
                 <div className="section-heading">
                   <span>Installation</span>
-                  <strong>{`+${formatCurrency(config.mountingType === "wall_mounted" ? 100 : 150)}`}</strong>
+                  {config.mountingType === "wall_mounted" && (
+                    <strong>{`+${formatCurrency(installationPrice)}`}</strong>
+                  )}
                 </div>
                 <div className="mounting-card-grid">
-                  <button
-                    className={`mounting-card ${config.mountingType === "wall_mounted" ? "selected" : ""}`}
-                    onClick={() => updateMountingType("wall_mounted")}
-                    type="button"
-                  >
-                    <span className="mounting-card-title">Wall mounted</span>
-                    <span className="mounting-card-desc">Floats On A Concealed Bracket, Vanity-Free</span>
-                  </button>
-                  <button
-                    className={`mounting-card ${config.mountingType === "countertop" ? "selected" : ""}`}
-                    onClick={() => updateMountingType("countertop")}
-                    type="button"
-                  >
-                    <span className="mounting-card-title">Countertop</span>
-                    <span className="mounting-card-desc">Rests On Your Existing Vanity Or Counter</span>
-                  </button>
+                  <Tooltip className="mounting-tooltip-wrapper" label={`+${formatCurrency(wallMountPrice)}`}>
+                    <button
+                      className={`mounting-card ${config.mountingType === "wall_mounted" ? "selected" : ""}`}
+                      onClick={() => updateMountingType("wall_mounted")}
+                      type="button"
+                    >
+                      <span className="mounting-card-title">Wall mounted</span>
+                      <span className="mounting-card-desc">Floats On A Concealed Bracket, Vanity-Free</span>
+                    </button>
+                  </Tooltip>
+                  <Tooltip className="mounting-tooltip-wrapper">
+                    <button
+                      className={`mounting-card ${config.mountingType === "countertop" ? "selected" : ""}`}
+                      onClick={() => updateMountingType("countertop")}
+                      type="button"
+                    >
+                      <span className="mounting-card-title">Countertop</span>
+                      <span className="mounting-card-desc">Rests On Your Existing Vanity Or Counter</span>
+                    </button>
+                  </Tooltip>
                 </div>
               </section>
 
@@ -780,22 +1055,20 @@ function App() {
               <section className="control-section">
                 <div className="section-heading">
                   <span>Bowl Model</span>
-                  <strong>{formatCurrency(config.bowl?.basePrice ?? 340)}</strong>
                 </div>
                 <div className="bowl-model-card-grid">
                   {filteredBowls.map((bowl) => (
-                    <Tooltip key={bowl.id} label={formatCurrency(bowl.basePrice ?? 0)}>
-                      <Card
-                        image={bowl.image}
-                        label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
-                        selected={config.bowl?.id === bowl.id}
-                        onClick={() => updateBowl(bowl)}
-                      >
-                        <div className="reusable-card-subtitle">
-                          {formatBowlSize(bowl.size)}
-                        </div>
-                      </Card>
-                    </Tooltip>
+                    <Card
+                      key={bowl.id}
+                      image={bowl.image}
+                      label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
+                      selected={config.bowl?.id === bowl.id}
+                      onClick={() => updateBowl(bowl)}
+                    >
+                      <div className="reusable-card-subtitle">
+                        {formatBowlSize(bowl.size)}
+                      </div>
+                    </Card>
                   ))}
                 </div>
               </section>
@@ -835,9 +1108,9 @@ function App() {
                   <div style={{ marginTop: "24px" }}>
                     <SliderRow
                       label="Spacing"
-                      max={600}
-                      min={100}
-                      value={Number(config.dimensions.bowlSpacing ?? 100)}
+                      max={maxSpacingLimit}
+                      min={minSpacing}
+                      value={Number(config.dimensions.bowlSpacing ?? minSpacing)}
                       onChange={(value) => updateDimension("bowlSpacing", value)}
                     />
                   </div>
@@ -854,8 +1127,20 @@ function App() {
                   <SliderRow label="Width" max={maximumOverallWidth} min={minOverallWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
                   
                   <div className="offset-grid">
-                    <OffsetControl label="Left" min={config.mountingType === "wall_mounted" ? 100 : 50} value={Number(config.dimensions.L2 ?? 0)} onChange={(value) => updateDimension("L2", value)} />
-                    <OffsetControl label="Right" min={config.mountingType === "wall_mounted" ? 100 : 50} value={Number(config.dimensions.L3 ?? 0)} onChange={(value) => updateDimension("L3", value)} />
+                    <OffsetControl
+                      label="Left"
+                      max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
+                      min={minLeftRight}
+                      value={Number(config.dimensions.L2 ?? minLeftRight)}
+                      onChange={(value) => updateDimension("L2", value)}
+                    />
+                    <OffsetControl
+                      label="Right"
+                      max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
+                      min={minLeftRight}
+                      value={Number(config.dimensions.L3 ?? minLeftRight)}
+                      onChange={(value) => updateDimension("L3", value)}
+                    />
                   </div>
                 </div>
 
@@ -867,8 +1152,20 @@ function App() {
                   <SliderRow label="Depth" max={maximumOverallDepth} min={minOverallDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
                   
                   <div className="offset-grid">
-                    <OffsetControl label="Front" min={50} value={Number(config.dimensions.D3 ?? 0)} onChange={(value) => updateDimension("D3", value)} />
-                    <OffsetControl label="Rear" min={100} value={Number(config.dimensions.D2 ?? 0)} onChange={(value) => updateDimension("D2", value)} />
+                    <OffsetControl
+                      label="Front"
+                      max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
+                      min={minFrontRear}
+                      value={Number(config.dimensions.D3 ?? minFrontRear)}
+                      onChange={(value) => updateDimension("D3", value)}
+                    />
+                    <OffsetControl
+                      label="Rear"
+                      max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
+                      min={minFrontRear}
+                      value={Number(config.dimensions.D2 ?? minFrontRear)}
+                      onChange={(value) => updateDimension("D2", value)}
+                    />
                   </div>
                 </div>
 
@@ -877,7 +1174,7 @@ function App() {
 
                 {/* Height Block */}
                 <div>
-                  <SliderRow label="Height" max={500} min={config.bowl?.size.height ?? 80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
+                  <SliderRow label="Height" max={maximumOverallHeight} min={config.bowl?.size.height ?? 80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
                 </div>
               </section>
 
@@ -905,11 +1202,13 @@ function App() {
               <section className="finish-section">
                 <div className="section-heading">
                   <span>Color</span>
-                  <strong style={{ color: "#a38460" }}>
-                    {bowlColor === "white"
-                      ? "Free"
-                      : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
-                  </strong>
+                  {bowlColor && (
+                    <strong style={{ color: "#a38460" }}>
+                      {bowlColor === "white"
+                        ? "Free"
+                        : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
+                    </strong>
+                  )}
                 </div>
                 <div className="finish-card-grid">
                   {bowlColorOptions.map((option) => (
@@ -928,17 +1227,26 @@ function App() {
               <section className="finish-section">
                 <div className="section-heading">
                   <span>Drain Cap Finish</span>
-                  <strong style={{ color: "#a38460" }}>{`+${formatCurrency(29)}`}</strong>
+                  {selectedDrainFinish && (
+                    <strong style={{ color: "#a38460" }}>
+                      {selectedDrainFinish.price === 0
+                        ? "Free"
+                        : `+${formatCurrency(selectedDrainFinish.price)}`}
+                    </strong>
+                  )}
                 </div>
                 <div className="finish-card-grid">
                   {drainFinishOptions.map((option) => (
-                    <Tooltip key={option.id} label={`+${formatCurrency(29)}`}>
+                    <Tooltip
+                      key={option.id}
+                      label={option.price === 0 ? "Free" : `+${formatCurrency(option.price)}`}
+                    >
                       <button
                         className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
                         onClick={() => setDrainFinish(option.id)}
                         type="button"
                       >
-                        {option.label} +{formatCurrency(29)}
+                        {option.label} {option.price === 0 ? "Free" : `+${formatCurrency(option.price)}`}
                       </button>
                     </Tooltip>
                   ))}
@@ -952,7 +1260,26 @@ function App() {
           <div className="cart-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
           <div className="cart-actions">
             <button className="summary-button" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
-            <button className="add-cart-button" onClick={handleAddToCart} type="button">Add to Cart</button>
+            <Tooltip
+              className="cart-tooltip-wrapper"
+              label={isCartDisabled ? cartDisabledTooltip : undefined}
+              triggerOnClick
+            >
+              <button
+                aria-disabled={isCartDisabled}
+                className={`add-cart-button ${isCartDisabled ? "disabled" : ""}`}
+                onClick={(e) => {
+                  if (isCartDisabled) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleAddToCart();
+                }}
+                type="button"
+              >
+                Add to Cart
+              </button>
+            </Tooltip>
           </div>
         </footer>
       </aside>
@@ -1016,28 +1343,28 @@ function App() {
                  </ul>
                </div>
 
-               {/* Finish Card */}
-               <div className="summary-group-card">
-                 <div className="summary-group-header">
-                   <strong>Finish Subtotal</strong>
-                   <span>{formatCurrency(finishSubtotal)}</span>
-                 </div>
-                 <div className="summary-group-divider" />
-                 <ul className="summary-group-details">
-                   <li>
-                     <span>Bowl Color:</span>
-                     <strong>{selectedBowlColorLabel}</strong>
-                   </li>
-                   <li>
-                     <span>Bowl Finish:</span>
-                     <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
-                   </li>
-                   <li>
-                     <span>Drain Cap:</span>
-                     <strong>{selectedDrainFinish.label}</strong>
-                   </li>
-                 </ul>
-               </div>
+                {/* Finish Card */}
+                <div className="summary-group-card">
+                  <div className="summary-group-header">
+                    <strong>Finish Subtotal</strong>
+                    <span>{formatCurrency(finishSubtotal)}</span>
+                  </div>
+                  <div className="summary-group-divider" />
+                  <ul className="summary-group-details">
+                    <li>
+                      <span>Bowl Color:</span>
+                      <strong>{bowlColor ? selectedBowlColorLabel : "Not selected"}</strong>
+                    </li>
+                    <li>
+                      <span>Bowl Finish:</span>
+                      <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
+                    </li>
+                    <li>
+                      <span>Drain Cap:</span>
+                      <strong>{selectedDrainFinish ? selectedDrainFinish.label : "Not selected"}</strong>
+                    </li>
+                  </ul>
+                </div>
              </div>
 
              <div className="summary-spacer" />
@@ -1059,7 +1386,26 @@ function App() {
                <div className="summary-grand-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
              </div>
 
-            <button className="summary-add-cart" onClick={handleAddToCart} type="button">Add to Cart</button>
+            <Tooltip
+              className="summary-cart-tooltip-wrapper"
+              label={isCartDisabled ? cartDisabledTooltip : undefined}
+              triggerOnClick
+            >
+              <button
+                aria-disabled={isCartDisabled}
+                className={`summary-add-cart ${isCartDisabled ? "disabled" : ""}`}
+                onClick={(e) => {
+                  if (isCartDisabled) {
+                    e.preventDefault();
+                    return;
+                  }
+                  handleAddToCart();
+                }}
+                type="button"
+              >
+                Add to Cart
+              </button>
+            </Tooltip>
           </div>
         </section>
       </div>
@@ -1265,7 +1611,7 @@ function NumericInput({ ariaLabel, max, min, onCommit, suffix, value }: NumericI
             event.currentTarget.blur();
           }
         }}
-        step="0.01"
+        step="any"
         type="number"
         value={draft}
       />
