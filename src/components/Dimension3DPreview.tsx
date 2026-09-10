@@ -3,7 +3,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Box3, BoxGeometry, type BufferGeometry, Group, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, Group, Line as ThreeLine, LineBasicMaterial, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
@@ -423,20 +423,22 @@ function BasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sinkH
 
 function Line({ start, end, color = "#1a1a1a" }: { start: [number, number, number]; end: [number, number, number]; color?: string }) {
   const points = useMemo(() => [new Vector3(...start), new Vector3(...end)], [start, end]);
-  const geoRef = useRef<BufferGeometry>(null);
+  const line = useMemo(() => {
+    const geometry = new BufferGeometry().setFromPoints(points);
+    const material = new LineBasicMaterial({ color });
+    const object = new ThreeLine(geometry, material);
+    object.renderOrder = 10;
+    return object;
+  }, [color, points]);
 
   useEffect(() => {
-    if (geoRef.current) {
-      geoRef.current.setFromPoints(points);
-    }
-  }, [points]);
+    return () => {
+      line.geometry.dispose();
+      line.material.dispose();
+    };
+  }, [line]);
 
-  return (
-    <line renderOrder={10}>
-      <bufferGeometry ref={geoRef} attach="geometry" />
-      <lineBasicMaterial attach="material" color={color} linewidth={2} />
-    </line>
-  );
+  return <primitive object={line} />;
 }
 
 interface MeasurementsProps {
