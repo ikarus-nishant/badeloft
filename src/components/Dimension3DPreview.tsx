@@ -84,6 +84,7 @@ interface CountertopModelProps {
 
 const unit = 180;
 const countertopCapThickness = 0.045;
+const connectorSeamOverlap = 1.5 / unit;
 
 const defaultLightSettings: LightSettings = {
   ambientIntensity: 0.6,
@@ -274,7 +275,13 @@ function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, l
 
     return {
       base: conformCountertopTopNormals(
-        cutGeometryWithBowls(baseGeometry, bowls, cutterFootprint.width, cutterFootprint.depth, totalHeight),
+        cutGeometryWithBowls(
+          baseGeometry,
+          bowls,
+          Math.max(0.001, cutterFootprint.width - connectorSeamOverlap * 2),
+          Math.max(0.001, cutterFootprint.depth - connectorSeamOverlap * 2),
+          totalHeight,
+        ),
       ),
     };
   }, [bowls, cutterFootprint.depth, cutterFootprint.width, depth, height, length]);
