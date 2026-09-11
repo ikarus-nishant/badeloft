@@ -1884,6 +1884,21 @@ svg text {
   flex-shrink: 0;
   margin-top: 16px;
   width: 100%;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.summary-add-cart.success {
+  background: #1b7340;
+  border-color: #1b7340;
+}
+
+.summary-cart-error {
+  color: #c53030;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 8px;
+  line-height: 1.4;
 }
 
 .summary-footer {

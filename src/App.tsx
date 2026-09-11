@@ -159,6 +159,8 @@ function App() {
   const [activeBuildMode, setActiveBuildMode] = useState<"build" | "finish">("build");
   const [viewerResetToken, setViewerResetToken] = useState(0);
   const [showBuildSummary, setShowBuildSummary] = useState(false);
+  const [cartStatus, setCartStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [cartErrorMessage, setCartErrorMessage] = useState<string | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [bowlFinish, setBowlFinish] = useState<BowlFinish>("glossy");
   const [bowlColor, setBowlColor] = useState<BowlColor | undefined>(undefined);
@@ -171,12 +173,16 @@ function App() {
   const arModelUrlRef = useRef<string | undefined>(undefined);
   const arViewerRef = useRef<ModelViewerElement>(null);
   const applyingHistory = useRef(false);
+  const bowlId = config.bowl?.id ?? "UB-01";
+  const selectedBowlType = getBowlTypeFromId(bowlId);
+  const isRamp = selectedBowlType === "tilt";
+  const effectiveDrainFinish: DrainFinish | undefined = isRamp ? "chrome" : drainFinish;
   const currentSnapshot = useMemo<HistorySnapshot>(() => ({
     bowlColor,
     bowlFinish,
     config,
-    drainFinish,
-  }), [bowlColor, bowlFinish, config, drainFinish]);
+    drainFinish: effectiveDrainFinish,
+  }), [bowlColor, bowlFinish, config, effectiveDrainFinish]);
   const history = useRef<ConfiguratorHistory>({
     future: [],
     past: [],
@@ -206,9 +212,7 @@ function App() {
   const maximumOverallHeight = 10 * 25.4; // 10 inches (254 mm)
   const selectedBowlColor = (bowlColor && bowlColorOptions.find((option) => option.id === bowlColor)?.color) ?? "#f7f7f5";
   const selectedBowlColorLabel = (bowlColor && bowlColorOptions.find((option) => option.id === bowlColor)?.label) ?? "";
-  const selectedDrainFinish = drainFinish ? drainFinishOptions.find((option) => option.id === drainFinish) : undefined;
-  const bowlId = config.bowl?.id ?? "UB-01";
-  const selectedBowlType = getBowlTypeFromId(bowlId);
+  const selectedDrainFinish = effectiveDrainFinish ? drainFinishOptions.find((option) => option.id === effectiveDrainFinish) : undefined;
   const { shape: selectedShape, size: selectedSize } = getShapeAndSizeFromBowlId(bowlId);
 
   // Model-specific pricing variables
@@ -247,10 +251,10 @@ function App() {
     config.bowlQuantity &&
     bowlFinish &&
     bowlColor &&
-    drainFinish
+    effectiveDrainFinish
   );
 
-  const isCartDisabled = activeBuildMode !== "finish" || !hasAllSelections;
+  const isCartDisabled = !hasAllSelections;
   const cartDisabledTooltip = "One more step - select your sink finish to add to cart";
 
   const selectedDrainEdge: "left" | "rear" | "right" = bowlId === "UB-04-RL"
@@ -358,6 +362,49 @@ function App() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [showBuildSummary]);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== "https://www.badeloft.com") {
+        return;
+      }
+
+      if (!event.data || typeof event.data !== "object") {
+        return;
+      }
+
+      if (event.data.type !== "badeloft:sink:cart-result") {
+        return;
+      }
+
+      if (event.data.ok === true) {
+        setCartStatus("success");
+        setCartErrorMessage(null);
+      } else {
+        setCartStatus("error");
+        setCartErrorMessage(typeof event.data.message === "string" ? event.data.message : "Unable to add item to cart");
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cartStatus === "success") {
+      const timer = setTimeout(() => {
+        setCartStatus("idle");
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [cartStatus]);
+
+  useEffect(() => {
+    setCartStatus("idle");
+    setCartErrorMessage(null);
+  }, [config, bowlColor, bowlFinish, drainFinish]);
   useEffect(() => {
     if (applyingHistory.current) {
       applyingHistory.current = false;
@@ -795,8 +842,10 @@ function App() {
   };
 
   const handleAddToCart = () => {
-    if (isCartDisabled) return;
-    if (!bowlColor || !drainFinish) return;
+    if (isCartDisabled || cartStatus === "loading") return;
+    if (!bowlColor || !effectiveDrainFinish) return;
+    setCartStatus("loading");
+    setCartErrorMessage(null);
     const bowl = config.bowl ?? selectedStartBowl;
     const width = Number(dims.L ?? 0);
     const depth = Number(dims.D ?? 0);
@@ -828,7 +877,7 @@ function App() {
         },
         color: { hex: selectedBowlColor, id: bowlColor, label: selectedBowlColorLabel },
         finish: bowlFinish,
-        drainCapFinish: drainFinish,
+        drainCapFinish: effectiveDrainFinish,
         drainEdge: selectedDrainEdge,
         dimensionsInches: {
           overall: { width: toInches(width), depth: toInches(depth), height: toInches(height) },
@@ -873,7 +922,7 @@ function App() {
           <img src={assetUrl("assets/poweredby-logo.png")} alt="Powered by Ikarus Delta" />
         </div>
         <div className="stage-canvas">
-          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={drainFinish} onArModelReady={handleArModelReady} showDimensions={showDimensions} />
+          <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={effectiveDrainFinish} onArModelReady={handleArModelReady} showDimensions={showDimensions} />
         </div>
         <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
           <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
@@ -1205,7 +1254,7 @@ function App() {
                   {bowlColor && (
                     <strong style={{ color: "#a38460" }}>
                       {bowlColor === "white"
-                        ? "Free"
+                        ? "+$0"
                         : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
                     </strong>
                   )}
@@ -1224,34 +1273,36 @@ function App() {
                 </div>
               </section>
 
-              <section className="finish-section">
-                <div className="section-heading">
-                  <span>Drain Cap Finish</span>
-                  {selectedDrainFinish && (
-                    <strong style={{ color: "#a38460" }}>
-                      {selectedDrainFinish.price === 0
-                        ? "Free"
-                        : `+${formatCurrency(selectedDrainFinish.price)}`}
-                    </strong>
-                  )}
-                </div>
-                <div className="finish-card-grid">
-                  {drainFinishOptions.map((option) => (
-                    <Tooltip
-                      key={option.id}
-                      label={option.price === 0 ? "Free" : `+${formatCurrency(option.price)}`}
-                    >
-                      <button
-                        className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
-                        onClick={() => setDrainFinish(option.id)}
-                        type="button"
+              {!isRamp && (
+                <section className="finish-section">
+                  <div className="section-heading">
+                    <span>Drain Cap Finish</span>
+                    {selectedDrainFinish && (
+                      <strong style={{ color: "#a38460" }}>
+                        {selectedDrainFinish.price === 0
+                          ? "+$0"
+                          : `+${formatCurrency(selectedDrainFinish.price)}`}
+                      </strong>
+                    )}
+                  </div>
+                  <div className="finish-card-grid">
+                    {drainFinishOptions.map((option) => (
+                      <Tooltip
+                        key={option.id}
+                        label={option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
                       >
-                        {option.label} {option.price === 0 ? "Free" : `+${formatCurrency(option.price)}`}
-                      </button>
-                    </Tooltip>
-                  ))}
-                </div>
-              </section>
+                        <button
+                          className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
+                          onClick={() => setDrainFinish(option.id)}
+                          type="button"
+                        >
+                          {option.label} {option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
+                        </button>
+                      </Tooltip>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>
@@ -1273,7 +1324,7 @@ function App() {
                     e.preventDefault();
                     return;
                   }
-                  handleAddToCart();
+                  setShowBuildSummary(true);
                 }}
                 type="button"
               >
@@ -1333,7 +1384,7 @@ function App() {
                    <li>
                      <span>Dimensions:</span>
                      <strong>
-                       {Math.round(Number(dims.L ?? 0) / 25.4)}in x {Math.round(Number(dims.D ?? 0) / 25.4)}in x {Math.round(Number(dims.H ?? 0) / 25.4)}in
+                       {Number((Number(dims.L ?? 0) / 25.4).toFixed(2))}in x {Number((Number(dims.D ?? 0) / 25.4).toFixed(2))}in x {Number((Number(dims.H ?? 0) / 25.4).toFixed(2))}in
                      </strong>
                    </li>
                    <li>
@@ -1359,10 +1410,12 @@ function App() {
                       <span>Bowl Finish:</span>
                       <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
                     </li>
-                    <li>
-                      <span>Drain Cap:</span>
-                      <strong>{selectedDrainFinish ? selectedDrainFinish.label : "Not selected"}</strong>
-                    </li>
+                    {!isRamp && (
+                      <li>
+                        <span>Drain Cap:</span>
+                        <strong>{selectedDrainFinish ? selectedDrainFinish.label : "Not selected"}</strong>
+                      </li>
+                    )}
                   </ul>
                 </div>
              </div>
@@ -1392,10 +1445,10 @@ function App() {
               triggerOnClick
             >
               <button
-                aria-disabled={isCartDisabled}
-                className={`summary-add-cart ${isCartDisabled ? "disabled" : ""}`}
+                aria-disabled={isCartDisabled || cartStatus === "loading"}
+                className={`summary-add-cart ${isCartDisabled ? "disabled" : ""} ${cartStatus === "success" ? "success" : ""}`}
                 onClick={(e) => {
-                  if (isCartDisabled) {
+                  if (isCartDisabled || cartStatus === "loading") {
                     e.preventDefault();
                     return;
                   }
@@ -1403,9 +1456,16 @@ function App() {
                 }}
                 type="button"
               >
-                Add to Cart
+                {cartStatus === "loading" && "Adding..."}
+                {cartStatus === "success" && "Added to cart ✓"}
+                {cartStatus !== "loading" && cartStatus !== "success" && "Add to Cart"}
               </button>
             </Tooltip>
+            {cartErrorMessage && (
+              <div className="summary-cart-error" role="alert">
+                {cartErrorMessage}
+              </div>
+            )}
           </div>
         </section>
       </div>
