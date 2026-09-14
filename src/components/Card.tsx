@@ -21,8 +21,12 @@ export function Card({ image, label, selected = false, onClick, children }: Card
           <img src={image} alt={label || "Card image"} className="reusable-card-image" />
         </div>
       )}
-      {label && <div className="reusable-card-label">{label}</div>}
-      {children}
+      {(label || children) && (
+        <div className="reusable-card-content">
+          {label && <div className="reusable-card-label">{label}</div>}
+          {children}
+        </div>
+      )}
     </button>
   );
 }

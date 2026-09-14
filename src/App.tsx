@@ -1309,8 +1309,11 @@ function App() {
 
         <footer className="cart-footer">
           <div className="cart-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
+          <button className="summary-link-button" onClick={() => setShowBuildSummary(true)} type="button">
+            Build Summary
+          </button>
           <div className="cart-actions">
-            <button className="summary-button" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
+            <button className="summary-button desktop-only" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
             <Tooltip
               className="cart-tooltip-wrapper"
               label={isCartDisabled ? cartDisabledTooltip : undefined}
