@@ -7,6 +7,8 @@ import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDim
 import { mergedDimensions } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
+import { BottomSheet, type SnapPosition } from "./components/BottomSheet";
+import { NumberedStep } from "./components/NumberedStep";
 import { assetUrl, formatCurrency, handoffAddToCart, storefrontConfig, type SinkCartPayload } from "./integrations/storefront";
 
 const selectedStartBowl = bowlOptions.find((bowl) => bowl.id === "UB-04-M") ?? bowlOptions[0];
@@ -157,6 +159,8 @@ const sizes: BowlSize[] = ["S", "M", "L", "XL", "XXL"];
 function App() {
   const [config, setConfig] = useState<SinkConfiguration>(initialConfig);
   const [activeBuildMode, setActiveBuildMode] = useState<"build" | "finish">("build");
+  const [openStep, setOpenStep] = useState<number | null>(1);
+  const [mobileSnap, setMobileSnap] = useState<SnapPosition>("half");
   const [viewerResetToken, setViewerResetToken] = useState(0);
   const [showBuildSummary, setShowBuildSummary] = useState(false);
   const [cartStatus, setCartStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -173,6 +177,14 @@ function App() {
   const arModelUrlRef = useRef<string | undefined>(undefined);
   const arViewerRef = useRef<ModelViewerElement>(null);
   const applyingHistory = useRef(false);
+
+  // Resize 3D stage after drawer completes smooth transition
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [mobileSnap]);
   const bowlId = config.bowl?.id ?? "UB-01";
   const selectedBowlType = getBowlTypeFromId(bowlId);
   const isRamp = selectedBowlType === "tilt";
@@ -796,8 +808,12 @@ function App() {
     });
   };
 
-  const editSummarySection = (mode: "build" | "finish") => {
-    setActiveBuildMode(mode);
+  const editSummarySection = (mode: "build" | "finish" | number) => {
+    if (typeof mode === "number") {
+      setOpenStep(mode);
+    } else {
+      setOpenStep(mode === "build" ? 1 : 2);
+    }
     setShowBuildSummary(false);
   };
 
@@ -915,37 +931,497 @@ function App() {
     handoffAddToCart(payload);
   };
 
+  const subtitleSummary = useMemo(() => {
+    const mounting = config.mountingType === "wall_mounted" ? "Wall mounted" : "Countertop";
+    const finish = `${bowlFinish === "glossy" ? "Glossy" : "Matte"} ${selectedBowlColorLabel || "White"}`.trim();
+    const type = selectedBowlType === "tilt" ? "ramp" : selectedBowlType === "round" ? "oval" : "trough";
+    const bowlText = `${bowlCount} ${type} bowl${bowlCount > 1 ? "s" : ""}`;
+    const drainEdgeText = selectedBowlType === "tilt"
+      ? `${selectedDrainEdge.charAt(0).toUpperCase() + selectedDrainEdge.slice(1)} drain`
+      : "Center drain";
+    const widthIn = (Number(dims.L ?? 0) / 25.4).toFixed(0);
+    const depthIn = (Number(dims.D ?? 0) / 25.4).toFixed(1);
+    const sizeText = `${widthIn} × ${depthIn} in`;
+    const drainCapText = isRamp ? "Concealed slot" : `${selectedDrainFinish?.label ?? "Chrome"} cap`;
+
+    return `${mounting} · ${finish} · ${bowlText} · ${drainEdgeText} · ${sizeText} · ${drainCapText}`;
+  }, [
+    config.mountingType,
+    bowlFinish,
+    selectedBowlColorLabel,
+    selectedBowlType,
+    bowlCount,
+    selectedDrainEdge,
+    dims.L,
+    dims.D,
+    isRamp,
+    selectedDrainFinish,
+  ]);
+
+  const renderConfiguratorControls = (idSuffix: string = "") => (
+    <div className="panel-scroll" id={`configurator-panel${idSuffix}`}>
+      {idSuffix === "-mobile" && (
+        <div className="mobile-sheet-heading">
+          <h2 className="desktop-panel-title">Build your sink</h2>
+          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 4–6 weeks.</p>
+        </div>
+      )}
+      {/* 1. Installation */}
+      <NumberedStep
+        isOpen={openStep === 1}
+        onToggle={() => setOpenStep((prev) => (prev === 1 ? null : 1))}
+        priceDelta={config.mountingType === "wall_mounted" ? `+${formatCurrency(installationPrice)}` : undefined}
+        stepNumber={1}
+        summary={config.mountingType === "wall_mounted" ? "Wall mounted" : "Countertop"}
+        title="Installation"
+      >
+        <section className="control-section">
+          <div className="mounting-card-grid">
+            <Tooltip className="mounting-tooltip-wrapper" label={`+${formatCurrency(wallMountPrice)}`}>
+              <button
+                className={`mounting-card ${config.mountingType === "wall_mounted" ? "selected" : ""}`}
+                onClick={() => updateMountingType("wall_mounted")}
+                type="button"
+              >
+                <span className="mounting-card-title">Wall mounted</span>
+                <span className="mounting-card-desc">Floats On A Concealed Bracket, Vanity-Free</span>
+              </button>
+            </Tooltip>
+            <Tooltip className="mounting-tooltip-wrapper">
+              <button
+                className={`mounting-card ${config.mountingType === "countertop" ? "selected" : ""}`}
+                onClick={() => updateMountingType("countertop")}
+                type="button"
+              >
+                <span className="mounting-card-title">Countertop</span>
+                <span className="mounting-card-desc">Rests On Your Existing Vanity Or Counter</span>
+              </button>
+            </Tooltip>
+          </div>
+        </section>
+      </NumberedStep>
+
+      {/* 2. Surface finish */}
+      <NumberedStep
+        isOpen={openStep === 2}
+        onToggle={() => setOpenStep((prev) => (prev === 2 ? null : 2))}
+        priceDelta={bowlColorPrice > 0 ? `+${formatCurrency(bowlColorPrice)}` : undefined}
+        stepNumber={2}
+        summary={`${bowlFinish === "glossy" ? "Glossy" : "Matte"} ${selectedBowlColorLabel || "white"}`}
+        title="Surface finish"
+      >
+        <div className="finish-menu">
+          <section className="finish-section">
+            <div className="section-heading">
+              <span>Surface Finish</span>
+            </div>
+            <div className="finish-card-grid">
+              {(["glossy", "matte"] as const).map((finish) => (
+                <button
+                  className={`finish-card ${bowlFinish === finish ? "selected" : ""}`}
+                  key={finish}
+                  onClick={() => setBowlFinish(finish)}
+                  type="button"
+                >
+                  {finish === "glossy" ? "Glossy" : "Matte"}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="finish-section">
+            <div className="section-heading">
+              <span>Color</span>
+              {bowlColor && (
+                <strong style={{ color: "#a38460" }}>
+                  {bowlColor === "white"
+                    ? "+$0"
+                    : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
+                </strong>
+              )}
+            </div>
+            <div className="finish-card-grid">
+              {bowlColorOptions.map((option) => (
+                <button
+                  className={`color-card color-${option.id} ${bowlColor === option.id ? "selected" : ""}`}
+                  key={option.id}
+                  onClick={() => setBowlColor(option.id)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      </NumberedStep>
+
+      {/* 3. Bowl */}
+      <NumberedStep
+        isOpen={openStep === 3}
+        onToggle={() => setOpenStep((prev) => (prev === 3 ? null : 3))}
+        stepNumber={3}
+        summary={`${bowlCount} ${selectedBowlType === "tilt" ? "ramp" : selectedBowlType === "round" ? "oval" : "trough"} bowl${bowlCount > 1 ? "s" : ""}`}
+        title="Bowl"
+      >
+        <section className="control-section">
+          <div className="section-heading">
+            <span>Bowl Type</span>
+          </div>
+          <div className="bowl-type-image-grid">
+            {(["tilt", "rectangle", "round"] as const).map((type) => {
+              const typeDisplayNames = {
+                tilt: "Ramp",
+                rectangle: "Trough",
+                round: "Oval",
+              };
+              return (
+                <button
+                  className={`bowl-type-image-btn ${selectedBowlType === type ? "active" : ""}`}
+                  key={type}
+                  onClick={() => handleTypeChange(type)}
+                  type="button"
+                  title={typeDisplayNames[type]}
+                >
+                  <img src={assetUrl(`assets/${type}${selectedBowlType === type ? "_active" : ""}.webp`)} alt={typeDisplayNames[type]} />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="control-section">
+          <div className="section-heading">
+            <span>Bowl Size</span>
+          </div>
+          <div className="segmented-control" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+            <div
+              className="segmented-indicator"
+              style={{
+                transform: `translateX(${sizes.indexOf(selectedSize) * 100}%)`,
+                width: "20%",
+              }}
+            />
+            {sizes.map((size) => {
+              const isDisabled = isSizeDisabled(selectedBowlType, size);
+              return (
+                <Tooltip key={size} label={isDisabled ? "Not Available" : ""}>
+                  <button
+                    className={`${selectedSize === size ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
+                    onClick={() => !isDisabled && handleSizeChange(size)}
+                    disabled={isDisabled}
+                    type="button"
+                  >
+                    {size}
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: "10px", fontSize: "13px", color: "#737783", fontWeight: 500 }}>
+            Bowl Dimensions Are Fixed
+          </div>
+        </section>
+
+        <section className="control-section">
+          <div className="section-heading">
+            <span>Bowl Model</span>
+          </div>
+          <div className="bowl-model-card-grid">
+            {filteredBowls.map((bowl) => (
+              <Card
+                key={bowl.id}
+                image={bowl.image}
+                label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
+                selected={config.bowl?.id === bowl.id}
+                onClick={() => updateBowl(bowl)}
+              >
+                <div className="reusable-card-subtitle">
+                  {formatBowlSize(bowl.size)}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="control-section">
+          <div className="section-heading">
+            <span>Number Of Bowls</span>
+            <strong>{`x${bowlCount}`}</strong>
+          </div>
+          <div className="segmented-control">
+            <div
+              className="segmented-indicator"
+              style={{
+                transform: `translateX(${selectedQuantityIndex * 100}%)`,
+                width: "33.333%",
+              }}
+            />
+            {quantityOptions.map((item) => {
+              const qtyMultiplier = item.quantity === "single" ? 1 : (item.quantity === "double" ? 2 : 3);
+              const labelText = `x${qtyMultiplier}`;
+
+              return (
+                <Tooltip key={item.quantity} label={labelText}>
+                  <button
+                    className={config.bowlQuantity === item.quantity ? "active" : ""}
+                    onClick={() => updateQuantity(item.quantity)}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          {bowlCount > 1 && (
+            <div style={{ marginTop: "24px" }}>
+              <SliderRow
+                label="Spacing"
+                max={maxSpacingLimit}
+                min={minSpacing}
+                value={Number(config.dimensions.bowlSpacing ?? minSpacing)}
+                onChange={(value) => updateDimension("bowlSpacing", value)}
+              />
+            </div>
+          )}
+        </section>
+      </NumberedStep>
+
+      {/* 4. Drain edge */}
+      <NumberedStep
+        isOpen={openStep === 4}
+        onToggle={() => setOpenStep((prev) => (prev === 4 ? null : 4))}
+        stepNumber={4}
+        summary={selectedBowlType === "tilt" ? (selectedDrainEdge === "left" ? "Left" : selectedDrainEdge === "right" ? "Right" : "Rear") : "Center"}
+        title="Drain edge"
+      >
+        <section className="control-section">
+          {selectedBowlType === "tilt" ? (
+            <div className="drain-edge-sub-section">
+              <div className="segmented-control" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                <div
+                  className="segmented-indicator"
+                  style={{
+                    transform: `translateX(${(["left", "rear", "right"] as const).indexOf(selectedDrainEdge) * 100}%)`,
+                    width: "33.333%",
+                  }}
+                />
+                {(["left", "rear", "right"] as const).map((edge) => {
+                  const isDisabled = isDrainEdgeDisabled(edge);
+                  const label = edge.charAt(0).toUpperCase() + edge.slice(1);
+                  return (
+                    <Tooltip key={edge} label={isDisabled ? "Only Available on Size L" : ""}>
+                      <button
+                        className={`${selectedDrainEdge === edge ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
+                        onClick={() => !isDisabled && handleDrainEdgeChange(edge)}
+                        disabled={isDisabled}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="drain-integrated-notice">
+              Standard center drain is integrated into oval and trough bowl models.
+            </div>
+          )}
+        </section>
+      </NumberedStep>
+
+      {/* 5. Size */}
+      <NumberedStep
+        isOpen={openStep === 5}
+        onToggle={() => setOpenStep((prev) => (prev === 5 ? null : 5))}
+        stepNumber={5}
+        summary={`${(Number(dims.L ?? 0) / 25.4).toFixed(0)} in wide, ${(Number(dims.D ?? 0) / 25.4).toFixed(1)} in deep`}
+        title="Size"
+      >
+        <section className="control-section">
+          {/* Length Block */}
+          <div style={{ display: "grid", gap: "16px" }}>
+            <SliderRow label="Width" max={maximumOverallWidth} min={minOverallWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
+            
+            <div className="offset-grid">
+              <OffsetControl
+                label="Left"
+                max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
+                min={minLeftRight}
+                value={Number(config.dimensions.L2 ?? minLeftRight)}
+                onChange={(value) => updateDimension("L2", value)}
+              />
+              <OffsetControl
+                label="Right"
+                max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
+                min={minLeftRight}
+                value={Number(config.dimensions.L3 ?? minLeftRight)}
+                onChange={(value) => updateDimension("L3", value)}
+              />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="mid-divider" />
+
+          {/* Width Block */}
+          <div style={{ display: "grid", gap: "16px" }}>
+            <SliderRow label="Depth" max={maximumOverallDepth} min={minOverallDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
+            
+            <div className="offset-grid">
+              <OffsetControl
+                label="Front"
+                max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
+                min={minFrontRear}
+                value={Number(config.dimensions.D3 ?? minFrontRear)}
+                onChange={(value) => updateDimension("D3", value)}
+              />
+              <OffsetControl
+                label="Rear"
+                max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
+                min={minFrontRear}
+                value={Number(config.dimensions.D2 ?? minFrontRear)}
+                onChange={(value) => updateDimension("D2", value)}
+              />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="mid-divider" />
+
+          {/* Height Block */}
+          <div>
+            <SliderRow label="Height" max={maximumOverallHeight} min={config.bowl?.size.height ?? 80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
+          </div>
+        </section>
+      </NumberedStep>
+
+      {/* 6. Drain cap */}
+      <NumberedStep
+        isOpen={openStep === 6}
+        onToggle={() => setOpenStep((prev) => (prev === 6 ? null : 6))}
+        priceDelta={!isRamp && selectedDrainFinish && selectedDrainFinish.price > 0 ? `+${formatCurrency(selectedDrainFinish.price)}` : undefined}
+        stepNumber={6}
+        summary={isRamp ? "Concealed slot" : `${selectedDrainFinish?.label ?? "Chrome"} drain cap`}
+        title="Drain cap"
+      >
+        {!isRamp ? (
+          <section className="finish-section">
+            <div className="section-heading">
+              <span>Drain Cap Finish</span>
+              {selectedDrainFinish && (
+                <strong style={{ color: "#a38460" }}>
+                  {selectedDrainFinish.price === 0
+                    ? "+$0"
+                    : `+${formatCurrency(selectedDrainFinish.price)}`}
+                </strong>
+              )}
+            </div>
+            <div className="finish-card-grid">
+              {drainFinishOptions.map((option) => (
+                <Tooltip
+                  key={option.id}
+                  label={option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
+                >
+                  <button
+                    className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
+                    onClick={() => setDrainFinish(option.id)}
+                    type="button"
+                  >
+                    <span className="finish-card-label">{option.label}</span>
+                    <span className="finish-card-price">
+                      {option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
+                    </span>
+                  </button>
+                </Tooltip>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <div className="drain-integrated-notice">
+            Ramp sinks feature an elegant concealed slot drain integrated into the basin slope. No separate drain cap is required.
+          </div>
+        )}
+      </NumberedStep>
+    </div>
+  );
+
   return (
     <main className="builder-page">
-      <section className="stage">
-        <div className="stage-brand-badge">
+      {/* Mobile Top Header Bar (< 1024px) */}
+      <header className="mobile-app-header">
+        <a
+          aria-label="Badeloft Home"
+          className="mobile-header-brand"
+          href="https://www.badeloft.com/"
+          rel="noopener noreferrer"
+          target="_top"
+        >
+          <img
+            alt="Badeloft - Powered by Ikarus Delta"
+            className="mobile-brand-logo-img"
+            src={assetUrl("assets/poweredby-logo.png")}
+          />
+        </a>
+
+        <a
+          aria-label="Back to site"
+          className="mobile-header-back"
+          href="https://www.badeloft.com/"
+          onClick={(e) => {
+            try {
+              if (window.top && window.top !== window) {
+                e.preventDefault();
+                window.top.location.href = "https://www.badeloft.com/";
+              }
+            } catch {
+              // target="_top" handles cross-origin fallback
+            }
+          }}
+          rel="noopener noreferrer"
+          target="_top"
+        >
+          <span>Back to site</span>
+          <span className="mobile-back-x" aria-hidden="true">×</span>
+        </a>
+      </header>
+
+      {/* 3D Stage Viewport (Desktop Left / Mobile Top) */}
+      <section className={`stage snap-${mobileSnap}`}>
+        <div className="stage-brand-badge desktop-only-badge">
           <img src={assetUrl("assets/poweredby-logo.png")} alt="Powered by Ikarus Delta" />
         </div>
+
+        {/* Top-Right Pinned "View in your space" AR button (Mobile & Tablet) */}
+        <button
+          className="stage-ar-button-pinned"
+          disabled={!arModelLoaded}
+          onClick={launchAr}
+          title={arModelLoaded ? "View in your space" : "Preparing AR model"}
+          type="button"
+        >
+          <Box size={18} />
+          <span>View in your space</span>
+        </button>
+
         <div className="stage-canvas">
           <Dimension3DPreview key={viewerResetToken} bowlColor={selectedBowlColor} bowlFinish={bowlFinish} config={config} drainFinish={effectiveDrainFinish} onArModelReady={handleArModelReady} showDimensions={showDimensions} />
         </div>
+
         <div className="viewport-toolbar" role="toolbar" aria-label="3D viewport controls">
           <button className="toolbar-icon" aria-label="Undo" disabled={!canUndo} onClick={undo} title="Undo" type="button">
-            <Undo2 size={25} />
+            <Undo2 size={24} />
           </button>
           <button className="toolbar-icon" aria-label="Redo" disabled={!canRedo} onClick={redo} title="Redo" type="button">
-            <Redo2 size={25} />
+            <Redo2 size={24} />
           </button>
           <button className="toolbar-icon" aria-label="Reset view" onClick={() => setViewerResetToken((token) => token + 1)} title="Reset view" type="button">
-            <RefreshCw size={24} />
+            <RefreshCw size={22} />
           </button>
-          {/*
-          <button
-            aria-label="Sink view selected"
-            aria-pressed="true"
-            className="toolbar-icon toolbar-product active"
-            onClick={() => setViewerResetToken((token) => token + 1)}
-            title="Sink view"
-            type="button"
-          >
-            <Bath size={24} />
-          </button>
-          */}
           <button
             aria-label="Toggle dimensions"
             aria-pressed={showDimensions}
@@ -954,10 +1430,10 @@ function App() {
             title="Toggle dimensions"
             type="button"
           >
-            <Ruler size={24} />
+            <Ruler size={22} />
           </button>
           <button
-            className="toolbar-ar"
+            className="toolbar-ar desktop-only-ar"
             disabled={!arModelLoaded}
             onClick={launchAr}
             title={arModelLoaded ? "View in your space" : "Preparing AR model"}
@@ -969,351 +1445,75 @@ function App() {
         </div>
       </section>
 
-      <aside className="right-panel">
-        <div className="build-tabs" role="tablist" aria-label="Configurator mode">
-          <button aria-controls="configurator-panel" aria-selected={activeBuildMode === "build"} className={activeBuildMode === "build" ? "active" : ""} onClick={() => setActiveBuildMode("build")} role="tab" type="button">Build</button>
-          <button aria-controls="configurator-panel" aria-selected={activeBuildMode === "finish"} className={activeBuildMode === "finish" ? "active" : ""} onClick={() => setActiveBuildMode("finish")} role="tab" type="button">Finish</button>
-        </div>
+      {/* Mobile & Tablet Bottom Sheet (< 1024px) */}
+      <div className="mobile-sheet-wrapper">
+        <BottomSheet
+          cartDisabledTooltip={cartDisabledTooltip}
+          cartStatus={cartStatus}
+          isCartDisabled={isCartDisabled}
+          onAddToCart={() => setShowBuildSummary(true)}
+          onOpenSummary={() => setShowBuildSummary(true)}
+          onSnapChange={setMobileSnap}
+          snapState={mobileSnap}
+          subtitleSummary={subtitleSummary}
+          totalFormatted={formatCurrency(total)}
+        >
+          {renderConfiguratorControls("-mobile")}
+        </BottomSheet>
+      </div>
 
-        <div className="panel-scroll" id="configurator-panel" role="tabpanel">
-          {activeBuildMode === "build" ? (
-            <>
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Installation</span>
-                  {config.mountingType === "wall_mounted" && (
-                    <strong>{`+${formatCurrency(installationPrice)}`}</strong>
-                  )}
-                </div>
-                <div className="mounting-card-grid">
-                  <Tooltip className="mounting-tooltip-wrapper" label={`+${formatCurrency(wallMountPrice)}`}>
-                    <button
-                      className={`mounting-card ${config.mountingType === "wall_mounted" ? "selected" : ""}`}
-                      onClick={() => updateMountingType("wall_mounted")}
-                      type="button"
-                    >
-                      <span className="mounting-card-title">Wall mounted</span>
-                      <span className="mounting-card-desc">Floats On A Concealed Bracket, Vanity-Free</span>
-                    </button>
-                  </Tooltip>
-                  <Tooltip className="mounting-tooltip-wrapper">
-                    <button
-                      className={`mounting-card ${config.mountingType === "countertop" ? "selected" : ""}`}
-                      onClick={() => updateMountingType("countertop")}
-                      type="button"
-                    >
-                      <span className="mounting-card-title">Countertop</span>
-                      <span className="mounting-card-desc">Rests On Your Existing Vanity Or Counter</span>
-                    </button>
-                  </Tooltip>
-                </div>
-              </section>
+      {/* Desktop Configuration Panel (>= 1024px) */}
+      <aside className="right-panel desktop-only-panel">
+        <header className="desktop-panel-header">
+          <div className="desktop-panel-header-content">
+            <h2 className="desktop-panel-title">Build your sink</h2>
+            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 4–6 weeks.</p>
+          </div>
+          <a
+            aria-label="Back to site"
+            className="back-to-site-btn"
+            href="https://www.badeloft.com/"
+            onClick={(e) => {
+              try {
+                if (window.top && window.top !== window) {
+                  e.preventDefault();
+                  window.top.location.href = "https://www.badeloft.com/";
+                }
+              } catch {
+                // target="_top" handles cross-origin fallback
+              }
+            }}
+            rel="noopener noreferrer"
+            target="_top"
+            title="Back to site"
+          >
+            <span>Back to site</span>
+            <span className="back-to-site-circle" aria-hidden="true">
+              <X size={13} strokeWidth={2} />
+            </span>
+          </a>
+        </header>
 
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Type</span>
-                </div>
-                <div className="bowl-type-image-grid">
-                  {(["tilt", "rectangle", "round"] as const).map((type) => {
-                    const typeDisplayNames = {
-                      tilt: "Ramp",
-                      rectangle: "Trough",
-                      round: "Oval",
-                    };
-                    return (
-                      <button
-                        className={`bowl-type-image-btn ${selectedBowlType === type ? "active" : ""}`}
-                        key={type}
-                        onClick={() => handleTypeChange(type)}
-                        type="button"
-                        title={typeDisplayNames[type]}
-                      >
-                        <img src={assetUrl(`assets/${type}${selectedBowlType === type ? "_active" : ""}.webp`)} alt={typeDisplayNames[type]} />
-                      </button>
-                    );
-                  })}
-                </div>
- 
-                {selectedBowlType === "tilt" && (
-                  <div className="drain-edge-sub-section" style={{ marginTop: "24px" }}>
-                    <div className="section-heading">
-                      <span>Drain Edge</span>
-                    </div>
-                    <div className="segmented-control" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-                      <div
-                        className="segmented-indicator"
-                        style={{
-                          transform: `translateX(${(["left", "rear", "right"] as const).indexOf(selectedDrainEdge) * 100}%)`,
-                          width: "33.333%",
-                        }}
-                      />
-                      {(["left", "rear", "right"] as const).map((edge) => {
-                        const isDisabled = isDrainEdgeDisabled(edge);
-                        const label = edge.charAt(0).toUpperCase() + edge.slice(1);
-                        return (
-                          <Tooltip key={edge} label={isDisabled ? "Only Available on Size L" : ""}>
-                            <button
-                              className={`${selectedDrainEdge === edge ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
-                              onClick={() => !isDisabled && handleDrainEdgeChange(edge)}
-                              disabled={isDisabled}
-                              type="button"
-                            >
-                              {label}
-                            </button>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </section>
- 
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Size</span>
-                </div>
-                <div className="segmented-control" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-                  <div
-                    className="segmented-indicator"
-                    style={{
-                      transform: `translateX(${sizes.indexOf(selectedSize) * 100}%)`,
-                      width: "20%",
-                    }}
-                  />
-                  {sizes.map((size) => {
-                    const isDisabled = isSizeDisabled(selectedBowlType, size);
-                    return (
-                      <Tooltip key={size} label={isDisabled ? "Not Available" : ""}>
-                        <button
-                          className={`${selectedSize === size ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
-                          onClick={() => !isDisabled && handleSizeChange(size)}
-                          disabled={isDisabled}
-                          type="button"
-                        >
-                          {size}
-                        </button>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: "10px", fontSize: "13px", color: "#737783", fontWeight: 500 }}>
-                  Bowl Dimensions Are Fixed
-                </div>
-              </section>
- 
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Bowl Model</span>
-                </div>
-                <div className="bowl-model-card-grid">
-                  {filteredBowls.map((bowl) => (
-                    <Card
-                      key={bowl.id}
-                      image={bowl.image}
-                      label={bowlDetails[bowl.id]?.displayName ?? bowl.name}
-                      selected={config.bowl?.id === bowl.id}
-                      onClick={() => updateBowl(bowl)}
-                    >
-                      <div className="reusable-card-subtitle">
-                        {formatBowlSize(bowl.size)}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              </section>
-
-              <section className="control-section">
-                <div className="section-heading">
-                  <span>Number Of Bowls</span>
-                  <strong>{`x${bowlCount}`}</strong>
-                </div>
-                <div className="segmented-control">
-                  <div
-                    className="segmented-indicator"
-                    style={{
-                      transform: `translateX(${selectedQuantityIndex * 100}%)`,
-                      width: "33.333%",
-                    }}
-                  />
-                  {quantityOptions.map((item) => {
-                    const qtyMultiplier = item.quantity === "single" ? 1 : (item.quantity === "double" ? 2 : 3);
-                    const labelText = `x${qtyMultiplier}`;
-
-                    return (
-                      <Tooltip key={item.quantity} label={labelText}>
-                        <button
-                          className={config.bowlQuantity === item.quantity ? "active" : ""}
-                          onClick={() => updateQuantity(item.quantity)}
-                          type="button"
-                        >
-                          {item.label}
-                        </button>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-
-                {bowlCount > 1 && (
-                  <div style={{ marginTop: "24px" }}>
-                    <SliderRow
-                      label="Spacing"
-                      max={maxSpacingLimit}
-                      min={minSpacing}
-                      value={Number(config.dimensions.bowlSpacing ?? minSpacing)}
-                      onChange={(value) => updateDimension("bowlSpacing", value)}
-                    />
-                  </div>
-                )}
-              </section>
-
-              <section className="control-section">
-                <div className="section-heading dimensions-section-heading">
-                  <span>Sink Dimensions</span>
-                </div>
-
-                {/* Length Block */}
-                <div style={{ display: "grid", gap: "16px", marginTop: "16px" }}>
-                  <SliderRow label="Width" max={maximumOverallWidth} min={minOverallWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
-                  
-                  <div className="offset-grid">
-                    <OffsetControl
-                      label="Left"
-                      max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
-                      min={minLeftRight}
-                      value={Number(config.dimensions.L2 ?? minLeftRight)}
-                      onChange={(value) => updateDimension("L2", value)}
-                    />
-                    <OffsetControl
-                      label="Right"
-                      max={maximumOverallWidth - fixedSinkWidth - minLeftRight}
-                      min={minLeftRight}
-                      value={Number(config.dimensions.L3 ?? minLeftRight)}
-                      onChange={(value) => updateDimension("L3", value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="mid-divider" />
-
-                {/* Width Block */}
-                <div style={{ display: "grid", gap: "16px" }}>
-                  <SliderRow label="Depth" max={maximumOverallDepth} min={minOverallDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
-                  
-                  <div className="offset-grid">
-                    <OffsetControl
-                      label="Front"
-                      max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
-                      min={minFrontRear}
-                      value={Number(config.dimensions.D3 ?? minFrontRear)}
-                      onChange={(value) => updateDimension("D3", value)}
-                    />
-                    <OffsetControl
-                      label="Rear"
-                      max={maximumOverallDepth - fixedSinkDepth - minFrontRear}
-                      min={minFrontRear}
-                      value={Number(config.dimensions.D2 ?? minFrontRear)}
-                      onChange={(value) => updateDimension("D2", value)}
-                    />
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="mid-divider" />
-
-                {/* Height Block */}
-                <div>
-                  <SliderRow label="Height" max={maximumOverallHeight} min={config.bowl?.size.height ?? 80} value={Number(dims.H ?? 0)} onChange={(value) => updateDimension("H", value)} />
-                </div>
-              </section>
-
-            </>
-          ) : (
-            <div className="finish-menu">
-              <section className="finish-section">
-                <div className="section-heading">
-                  <span>Surface Finish</span>
-                </div>
-                <div className="finish-card-grid">
-                  {(["glossy", "matte"] as const).map((finish) => (
-                    <button
-                      className={`finish-card ${bowlFinish === finish ? "selected" : ""}`}
-                      key={finish}
-                      onClick={() => setBowlFinish(finish)}
-                      type="button"
-                    >
-                      {finish === "glossy" ? "Glossy" : "Matte"}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="finish-section">
-                <div className="section-heading">
-                  <span>Color</span>
-                  {bowlColor && (
-                    <strong style={{ color: "#a38460" }}>
-                      {bowlColor === "white"
-                        ? "+$0"
-                        : `+${formatCurrency(config.bowl?.colorPrice ?? 100)}`}
-                    </strong>
-                  )}
-                </div>
-                <div className="finish-card-grid">
-                  {bowlColorOptions.map((option) => (
-                    <button
-                      className={`color-card color-${option.id} ${bowlColor === option.id ? "selected" : ""}`}
-                      key={option.id}
-                      onClick={() => setBowlColor(option.id)}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {!isRamp && (
-                <section className="finish-section">
-                  <div className="section-heading">
-                    <span>Drain Cap Finish</span>
-                    {selectedDrainFinish && (
-                      <strong style={{ color: "#a38460" }}>
-                        {selectedDrainFinish.price === 0
-                          ? "+$0"
-                          : `+${formatCurrency(selectedDrainFinish.price)}`}
-                      </strong>
-                    )}
-                  </div>
-                  <div className="finish-card-grid">
-                    {drainFinishOptions.map((option) => (
-                      <Tooltip
-                        key={option.id}
-                        label={option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
-                      >
-                        <button
-                          className={`finish-card ${drainFinish === option.id ? "selected" : ""}`}
-                          onClick={() => setDrainFinish(option.id)}
-                          type="button"
-                        >
-                          {option.label} {option.price === 0 ? "+$0" : `+${formatCurrency(option.price)}`}
-                        </button>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </div>
-          )}
-        </div>
-
+        {renderConfiguratorControls("-desktop")}
         <footer className="cart-footer">
-          <div className="cart-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
-          <button className="summary-link-button" onClick={() => setShowBuildSummary(true)} type="button">
-            Build Summary
-          </button>
+          <div className="cart-total-section">
+            <div className="cart-total">
+              <span>Total:</span>
+              <strong>{formatCurrency(total)}</strong>
+            </div>
+            {subtitleSummary && (
+              <div
+                className="cart-subtitle-summary desktop-only"
+                onClick={() => setShowBuildSummary(true)}
+                role="button"
+                tabIndex={0}
+                title="Click to view full build summary"
+              >
+                {subtitleSummary}
+              </div>
+            )}
+          </div>
           <div className="cart-actions">
-            <button className="summary-button desktop-only" onClick={() => setShowBuildSummary(true)} type="button">Build Summary</button>
             <Tooltip
               className="cart-tooltip-wrapper"
               label={isCartDisabled ? cartDisabledTooltip : undefined}
