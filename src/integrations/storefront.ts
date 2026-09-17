@@ -37,7 +37,7 @@ export interface SinkCartPayload {
       label: string;
     };
     finish: "glossy" | "matte";
-    drainCapFinish: "chrome" | "black" | "brushed-nickel" | "glossy-white" | "matte-white";
+    drainCapFinish?: "chrome" | "black" | "brushed-nickel" | "glossy-white" | "matte-white";
     drainEdge: "left" | "rear" | "right";
     dimensionsInches: {
       overall: {

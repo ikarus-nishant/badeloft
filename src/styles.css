@@ -1453,6 +1453,10 @@ svg text {
 
   .reusable-card-subtitle {
     font-size: 11px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    line-height: 1.25;
   }
 
   .mounting-card {
@@ -2062,23 +2066,26 @@ svg text {
 
 .reusable-card-label {
   color: #636363;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
-  margin-top: 10px;
+  margin-top: 6px;
   margin-bottom: 2px;
   line-height: 1.2;
 }
 
 .reusable-card-subtitle {
-  color: #b3aca2;
-  font-size: 13px;
+  color: #8c857b;
+  font-size: 11.5px;
   font-weight: 500;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 2px;
+  margin-bottom: 3px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-align: center;
 }
 
 .reusable-card.selected .reusable-card-label {
@@ -3233,13 +3240,15 @@ svg text {
   }
 
   .bowl-model-card-grid .reusable-card-subtitle {
-    font-size: 12.5px;
+    font-size: 11.5px;
     margin: 2px 0 0 0;
-    line-height: 1.3;
+    line-height: 1.25;
     text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    word-break: normal;
+    overflow-wrap: break-word;
   }
 
   /* Colour & Finish Cards: 44px */

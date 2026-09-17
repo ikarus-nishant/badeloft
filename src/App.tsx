@@ -167,8 +167,8 @@ function App() {
   const [cartErrorMessage, setCartErrorMessage] = useState<string | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [bowlFinish, setBowlFinish] = useState<BowlFinish>("glossy");
-  const [bowlColor, setBowlColor] = useState<BowlColor | undefined>(undefined);
-  const [drainFinish, setDrainFinish] = useState<DrainFinish | undefined>(undefined);
+  const [bowlColor, setBowlColor] = useState<BowlColor | undefined>("white");
+  const [drainFinish, setDrainFinish] = useState<DrainFinish | undefined>("chrome");
   const [showDimensions, setShowDimensions] = useState(false);
   const [arModelLoaded, setArModelLoaded] = useState(false);
   const [arModelUrl, setArModelUrl] = useState<string>();
@@ -188,7 +188,7 @@ function App() {
   const bowlId = config.bowl?.id ?? "UB-01";
   const selectedBowlType = getBowlTypeFromId(bowlId);
   const isRamp = selectedBowlType === "tilt";
-  const effectiveDrainFinish: DrainFinish | undefined = isRamp ? "chrome" : drainFinish;
+  const effectiveDrainFinish: DrainFinish | undefined = isRamp ? undefined : drainFinish;
   const currentSnapshot = useMemo<HistorySnapshot>(() => ({
     bowlColor,
     bowlFinish,
@@ -263,7 +263,7 @@ function App() {
     config.bowlQuantity &&
     bowlFinish &&
     bowlColor &&
-    effectiveDrainFinish
+    (isRamp || effectiveDrainFinish)
   );
 
   const isCartDisabled = !hasAllSelections;
@@ -818,7 +818,7 @@ function App() {
   };
 
   const selectedSinkName = bowlDetails[config.bowl?.id ?? ""]?.displayName ?? config.bowl?.name ?? "01";
-  const productTitle = `Undermount Sink ${selectedSinkName}`;
+  const productTitle = `Custom Sink ${selectedSinkName}`;
 
   const handleArModelReady = useCallback((model: Blob) => {
     const nextUrl = URL.createObjectURL(model);
@@ -859,7 +859,7 @@ function App() {
 
   const handleAddToCart = () => {
     if (isCartDisabled || cartStatus === "loading") return;
-    if (!bowlColor || !effectiveDrainFinish) return;
+    if (!bowlColor || (!isRamp && !effectiveDrainFinish)) return;
     setCartStatus("loading");
     setCartErrorMessage(null);
     const bowl = config.bowl ?? selectedStartBowl;
@@ -893,7 +893,7 @@ function App() {
         },
         color: { hex: selectedBowlColor, id: bowlColor, label: selectedBowlColorLabel },
         finish: bowlFinish,
-        drainCapFinish: effectiveDrainFinish,
+        ...(!isRamp && effectiveDrainFinish ? { drainCapFinish: effectiveDrainFinish } : {}),
         drainEdge: selectedDrainEdge,
         dimensionsInches: {
           overall: { width: toInches(width), depth: toInches(depth), height: toInches(height) },
@@ -963,7 +963,7 @@ function App() {
       {idSuffix === "-mobile" && (
         <div className="mobile-sheet-heading">
           <h2 className="desktop-panel-title">Build your sink</h2>
-          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 4–6 weeks.</p>
+          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 10-12 weeks.</p>
         </div>
       )}
       {/* 1. Installation */}
@@ -1467,7 +1467,7 @@ function App() {
         <header className="desktop-panel-header">
           <div className="desktop-panel-header-content">
             <h2 className="desktop-panel-title">Build your sink</h2>
-            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 4–6 weeks.</p>
+            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 10-12 weeks.</p>
           </div>
           <a
             aria-label="Back to site"
@@ -1555,7 +1555,7 @@ function App() {
 
           <div className="summary-content">
             <div className="summary-product">
-              <img alt={config.bowl?.name ?? "Selected undermount sink"} src={config.bowl?.image} />
+              <img alt={config.bowl?.name ?? "Selected custom sink"} src={config.bowl?.image} />
               <strong>{productTitle}</strong>
             </div>
 
@@ -1629,7 +1629,7 @@ function App() {
                <span>Special Instructions</span>
                <textarea
                  onChange={(event) => setSpecialInstructions(event.target.value)}
-                 placeholder="Add any production or delivery instructions"
+                 placeholder="Add any production notes, faucet holes, etc"
                  value={specialInstructions}
                />
              </label>

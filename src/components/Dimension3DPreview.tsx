@@ -502,40 +502,88 @@ function Measurements({ show, config }: MeasurementsProps) {
   const zOverall = sceneDepth / 2 + 0.2;
   const xOverall = sceneLength / 2 + 0.2;
 
-  // Top rim measurement lines for the sink cutout (adapts with overall height)
+  // Inner sink measurement lines inside the basin opening (placed along rear and left inner walls)
   const topY = sceneHeight + countertopCapThickness;
   const rimLineY = topY + 0.003;
   const rimLabelY = topY + 0.01;
-  const rimOffset = 0.04;
-  const rimTick = 0.02;
 
-  const zSink = sinkEndZ + rimOffset;
-  const xSink = sinkStartX - rimOffset;
+  const bowlSceneLength = sinkEndX - sinkStartX;
+  const bowlSceneDepth = sinkEndZ - sinkStartZ;
+
+  const isOval = config.bowl?.id === "UB-02" || config.bowl?.id === "UB-03" || config.bowl?.name?.toLowerCase().includes("oval") || false;
+
+  // Measurement lines for Oval bowl (centered major and minor axes crossing through center)
+  const ovalInsetX = Math.max(0.035, bowlSceneLength * 0.045);
+  const ovalInsetZ = Math.max(0.035, bowlSceneDepth * 0.055);
+  const ovalStartX = sinkStartX + ovalInsetX;
+  const ovalEndX = sinkEndX - ovalInsetX;
+  const ovalStartZ = sinkStartZ + ovalInsetZ;
+  const ovalEndZ = sinkEndZ - ovalInsetZ;
+
+  // Rectangular / standard bowl measurement lines (L-shape along rear and left inner walls)
+  const wallInsetX = Math.max(0.035, bowlSceneLength * 0.065);
+  const wallInsetZ = Math.max(0.035, bowlSceneDepth * 0.065);
+
+  const lineStartX = sinkStartX + wallInsetX;
+  const lineEndX = sinkEndX - wallInsetX;
+  const lineEndZ = sinkEndZ - wallInsetZ;
+
+  const innerRearZ = sinkStartZ + wallInsetZ + 0.015;
+  const innerLeftX = sinkStartX + wallInsetX + 0.015;
+
+  // Space between the two lines at the top-left corner to eliminate intersection
+  const cornerSpace = 0.035;
+  const lineStartZ = innerRearZ + cornerSpace;
+  const tickSize = Math.min(0.018, bowlSceneDepth * 0.025);
 
   return (
     <group>
-      {/* 1. Sink Measurements on top rim with clean T-pointers and corner gap */}
-      <group>
-        {/* Sink Width along front rim */}
+      {/* 1. Sink Measurements placed inside the sink basin */}
+      {isOval ? (
         <group>
-          <Line start={[sinkStartX, rimLineY, zSink]} end={[sinkEndX, rimLineY, zSink]} color={color} />
-          <Line start={[sinkStartX, rimLineY, zSink - rimTick]} end={[sinkStartX, rimLineY, zSink + rimTick]} color={color} />
-          <Line start={[sinkEndX, rimLineY, zSink - rimTick]} end={[sinkEndX, rimLineY, zSink + rimTick]} color={color} />
-          <Html position={[sinkCenterX, rimLabelY, zSink]} center>
-            <div className="measurement-label">{sinkLengthInches} in</div>
-          </Html>
-        </group>
+          {/* Oval Width (Major Axis) across the center */}
+          <group>
+            <Line start={[ovalStartX, rimLineY, sinkCenterZ]} end={[ovalEndX, rimLineY, sinkCenterZ]} color={color} />
+            <Line start={[ovalStartX, rimLineY, sinkCenterZ - tickSize]} end={[ovalStartX, rimLineY, sinkCenterZ + tickSize]} color={color} />
+            <Line start={[ovalEndX, rimLineY, sinkCenterZ - tickSize]} end={[ovalEndX, rimLineY, sinkCenterZ + tickSize]} color={color} />
+            <Html position={[(ovalStartX + sinkCenterX) / 2, rimLabelY, sinkCenterZ]} center>
+              <div className="measurement-label">{sinkLengthInches} in</div>
+            </Html>
+          </group>
 
-        {/* Sink Depth along left rim */}
-        <group>
-          <Line start={[xSink, rimLineY, sinkStartZ]} end={[xSink, rimLineY, sinkEndZ]} color={color} />
-          <Line start={[xSink - rimTick, rimLineY, sinkStartZ]} end={[xSink + rimTick, rimLineY, sinkStartZ]} color={color} />
-          <Line start={[xSink - rimTick, rimLineY, sinkEndZ]} end={[xSink + rimTick, rimLineY, sinkEndZ]} color={color} />
-          <Html position={[xSink, rimLabelY, sinkCenterZ]} center>
-            <div className="measurement-label">{sinkDepthInches} in</div>
-          </Html>
+          {/* Oval Depth (Minor Axis) across the center */}
+          <group>
+            <Line start={[sinkCenterX, rimLineY, ovalStartZ]} end={[sinkCenterX, rimLineY, ovalEndZ]} color={color} />
+            <Line start={[sinkCenterX - tickSize, rimLineY, ovalStartZ]} end={[sinkCenterX + tickSize, rimLineY, ovalStartZ]} color={color} />
+            <Line start={[sinkCenterX - tickSize, rimLineY, ovalEndZ]} end={[sinkCenterX + tickSize, rimLineY, ovalEndZ]} color={color} />
+            <Html position={[sinkCenterX, rimLabelY, (ovalStartZ + sinkCenterZ) / 2]} center>
+              <div className="measurement-label">{sinkDepthInches} in</div>
+            </Html>
+          </group>
         </group>
-      </group>
+      ) : (
+        <group>
+          {/* Sink Width along the rear inside wall of the basin */}
+          <group>
+            <Line start={[lineStartX, rimLineY, innerRearZ]} end={[lineEndX, rimLineY, innerRearZ]} color={color} />
+            <Line start={[lineStartX, rimLineY, innerRearZ - tickSize]} end={[lineStartX, rimLineY, innerRearZ + tickSize]} color={color} />
+            <Line start={[lineEndX, rimLineY, innerRearZ - tickSize]} end={[lineEndX, rimLineY, innerRearZ + tickSize]} color={color} />
+            <Html position={[sinkCenterX, rimLabelY, innerRearZ]} center>
+              <div className="measurement-label">{sinkLengthInches} in</div>
+            </Html>
+          </group>
+
+          {/* Sink Depth along the left inside wall of the basin */}
+          <group>
+            <Line start={[innerLeftX, rimLineY, lineStartZ]} end={[innerLeftX, rimLineY, lineEndZ]} color={color} />
+            <Line start={[innerLeftX - tickSize, rimLineY, lineStartZ]} end={[innerLeftX + tickSize, rimLineY, lineStartZ]} color={color} />
+            <Line start={[innerLeftX - tickSize, rimLineY, lineEndZ]} end={[innerLeftX + tickSize, rimLineY, lineEndZ]} color={color} />
+            <Html position={[innerLeftX, rimLabelY, sinkCenterZ]} center>
+              <div className="measurement-label">{sinkDepthInches} in</div>
+            </Html>
+          </group>
+        </group>
+      )}
 
       {/* 2. Overall Width (Length) on floor or countertop */}
       <group>
