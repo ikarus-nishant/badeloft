@@ -4,7 +4,7 @@ import type { ModelViewerElement } from "@google/model-viewer";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
 import { bowlOptions } from "./data/bowlOptions";
 import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
-import { mergedDimensions } from "./utils/calculations";
+import { mergedDimensions, toFractionalInches } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
 import { BottomSheet, type SnapPosition } from "./components/BottomSheet";
@@ -1350,6 +1350,31 @@ function App() {
     </div>
   );
 
+  const widthMm = Math.round(Number(dims.L ?? 0));
+  const depthMm = Math.round(Number(dims.D ?? 0));
+  const heightMm = Math.round(Number(dims.H ?? config.bowl?.size.height ?? 0));
+  const widthFraction = toFractionalInches(widthMm);
+  const depthFraction = toFractionalInches(depthMm);
+  const heightFraction = toFractionalInches(heightMm);
+
+  const leftMm = Math.round(Number(dims.L2 ?? 0));
+  const rightMm = Math.round(Number(dims.L3 ?? 0));
+  const isCentered = Math.abs(leftMm - rightMm) <= 3;
+  const leftIn = toFractionalInches(leftMm).formattedText;
+  const rightIn = toFractionalInches(rightMm).formattedText;
+
+  const shapeDisplayName = selectedBowlType === "tilt" ? "Ramp" : (selectedBowlType === "round" ? "Oval" : "Trough");
+  const sizeMap: Record<string, string> = {
+    s: "small",
+    m: "medium",
+    l: "large",
+    xl: "XL",
+    xxl: "XXL",
+  };
+  const sizeDisplayName = sizeMap[selectedSize.toLowerCase()] ?? selectedSize.toLowerCase();
+  const bowlCodeName = bowlDetails[bowlId]?.displayName ?? config.bowl?.name ?? "04-M";
+  const bowlSpecText = `${shapeDisplayName}, ${sizeDisplayName} (${bowlCodeName}) × ${bowlCount}`;
+
   return (
     <main className="builder-page">
       {/* Mobile Top Header Bar (< 1024px) */}
@@ -1554,93 +1579,196 @@ function App() {
           </header>
 
           <div className="summary-content">
-            <div className="summary-product">
-              <img alt={config.bowl?.name ?? "Selected custom sink"} src={config.bowl?.image} />
-              <strong>{productTitle}</strong>
+            {/* SPECIFICATIONS Card */}
+            <div className="summary-spec-card">
+              <div className="spec-card-header">
+                <span className="spec-card-title">SPECIFICATIONS</span>
+                <button
+                  type="button"
+                  className="spec-edit-btn"
+                  onClick={() => {
+                    setShowBuildSummary(false);
+                    setOpenStep(1);
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+              <div className="spec-card-divider" />
+              <div className="spec-rows">
+                <div className="spec-row">
+                  <span className="spec-label">Installation</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {config.mountingType === "wall_mounted" ? "Wall mounted" : "Countertop"}
+                    </strong>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Bowl</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">{bowlSpecText}</strong>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Width</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {widthFraction.whole}
+                      {widthFraction.fractionText && (
+                        <>
+                          {" "}
+                          <sup>{widthFraction.fractionText}</sup>
+                        </>
+                      )}{" "}
+                      in
+                    </strong>
+                    <span className="spec-val-secondary">{widthMm} mm</span>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Depth</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {depthFraction.whole}
+                      {depthFraction.fractionText && (
+                        <>
+                          {" "}
+                          <sup>{depthFraction.fractionText}</sup>
+                        </>
+                      )}{" "}
+                      in
+                    </strong>
+                    <span className="spec-val-secondary">{depthMm} mm</span>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Height</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {heightFraction.whole}
+                      {heightFraction.fractionText && (
+                        <>
+                          {" "}
+                          <sup>{heightFraction.fractionText}</sup>
+                        </>
+                      )}{" "}
+                      in
+                    </strong>
+                    <span className="spec-val-secondary">{heightMm} mm</span>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Bowl position</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">{isCentered ? "Centered" : "Offset"}</strong>
+                    <span className="spec-val-secondary">
+                      L {leftIn} · R {rightIn}
+                    </span>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Color</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {bowlColor ? bowlColor.charAt(0).toUpperCase() + bowlColor.slice(1) : "White"}
+                    </strong>
+                    <span className="spec-val-secondary">
+                      {bowlColor === "white" || !bowlColor ? "Included" : `+$${bowlColorPrice}`}
+                    </span>
+                  </div>
+                </div>
+                <div className="spec-row">
+                  <span className="spec-label">Finish</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {bowlFinish === "glossy" ? "Glossy" : "Matte"}
+                    </strong>
+                    <span className="spec-val-secondary">Included</span>
+                  </div>
+                </div>
+                {!isRamp && selectedDrainFinish && (
+                  <div className="spec-row">
+                    <span className="spec-label">Drain cap</span>
+                    <div className="spec-value">
+                      <strong className="spec-val-primary">{selectedDrainFinish.label}</strong>
+                      <span className="spec-val-secondary">
+                        {selectedDrainFinish.price > 0 ? `+$${selectedDrainFinish.price}` : "Included"}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-             <div className="summary-items">
-               {/* Build Card */}
-               <div className="summary-group-card">
-                 <div className="summary-group-header">
-                   <strong>Build Subtotal</strong>
-                   <span>{formatCurrency(buildSubtotal)}</span>
-                 </div>
-                 <div className="summary-group-divider" />
-                 <ul className="summary-group-details">
-                   <li>
-                     <span>Bowl Model:</span>
-                     <strong>{selectedSinkName}</strong>
-                   </li>
-                   <li>
-                     <span>Bowl Shape:</span>
-                     <strong>{selectedBowlType === "tilt" ? "Ramp" : (selectedBowlType === "round" ? "Oval" : "Trough")}</strong>
-                   </li>
-                   <li>
-                     <span>Bowl Size:</span>
-                     <strong>{selectedSize}</strong>
-                   </li>
-                   <li>
-                     <span>Number of Bowls:</span>
-                     <strong>{bowlCount}</strong>
-                   </li>
-                   <li>
-                     <span>Dimensions:</span>
-                     <strong>
-                       {Number((Number(dims.L ?? 0) / 25.4).toFixed(2))}in x {Number((Number(dims.D ?? 0) / 25.4).toFixed(2))}in x {Number((Number(dims.H ?? 0) / 25.4).toFixed(2))}in
-                     </strong>
-                   </li>
-                   <li>
-                     <span>Installation:</span>
-                     <strong>{config.mountingType === "wall_mounted" ? "Wall Mounted" : "Countertop"}</strong>
-                   </li>
-                 </ul>
-               </div>
-
-                {/* Finish Card */}
-                <div className="summary-group-card">
-                  <div className="summary-group-header">
-                    <strong>Finish Subtotal</strong>
-                    <span>{formatCurrency(finishSubtotal)}</span>
+            {/* What happens next */}
+            <div className="what-happens-next">
+              <h3 className="summary-block-title">What happens next</h3>
+              <ol className="next-steps-list">
+                <li className="next-step-item">
+                  <div className="next-step-circle" aria-hidden="true">
+                    1
                   </div>
-                  <div className="summary-group-divider" />
-                  <ul className="summary-group-details">
-                    <li>
-                      <span>Bowl Color:</span>
-                      <strong>{bowlColor ? selectedBowlColorLabel : "Not selected"}</strong>
-                    </li>
-                    <li>
-                      <span>Bowl Finish:</span>
-                      <strong>{bowlFinish === "glossy" ? "Glossy" : "Matte"}</strong>
-                    </li>
-                    {!isRamp && (
-                      <li>
-                        <span>Drain Cap:</span>
-                        <strong>{selectedDrainFinish ? selectedDrainFinish.label : "Not selected"}</strong>
-                      </li>
-                    )}
-                  </ul>
-                </div>
-             </div>
+                  <div className="next-step-content">
+                    <strong className="next-step-title">We draw it.</strong>
+                    <p className="next-step-desc">
+                      Our factory prepares a CAD drawing of your exact sink for your approval.
+                    </p>
+                  </div>
+                </li>
+                <li className="next-step-item">
+                  <div className="next-step-circle" aria-hidden="true">
+                    2
+                  </div>
+                  <div className="next-step-content">
+                    <strong className="next-step-title">You approve, or walk away.</strong>
+                    <p className="next-step-desc">
+                      Full refund if the drawing isn't right or your plans change before production starts.
+                    </p>
+                  </div>
+                </li>
+                <li className="next-step-item">
+                  <div className="next-step-circle" aria-hidden="true">
+                    3
+                  </div>
+                  <div className="next-step-content">
+                    <strong className="next-step-title">We cast it.</strong>
+                    <p className="next-step-desc">
+                      Hand-finished in stone resin and delivered in 9–12 weeks.
+                    </p>
+                  </div>
+                </li>
+              </ol>
+            </div>
 
-             <div className="summary-spacer" />
+            {/* Notes for our team */}
+            <div className="summary-notes-section">
+              <label htmlFor="summary-team-notes" className="summary-notes-label">
+                <strong>Notes for our team</strong>
+                <span className="summary-notes-optional">(optional)</span>
+              </label>
+              <textarea
+                id="summary-team-notes"
+                className="summary-notes-textarea"
+                onChange={(event) => setSpecialInstructions(event.target.value)}
+                placeholder="Anything we should know about your project, e.g. 1 faucet hole centered in back of the bowl"
+                value={specialInstructions}
+                rows={3}
+              />
+              <p className="summary-notes-hint">
+                We'll confirm anything noted here on your drawing before production.
+              </p>
+            </div>
+          </div>
 
-             <label className="summary-instructions">
-               <span>Special Instructions</span>
-               <textarea
-                 onChange={(event) => setSpecialInstructions(event.target.value)}
-                 placeholder="Add any production notes, faucet holes, etc"
-                 value={specialInstructions}
-               />
-             </label>
-           </div>
-
-           <div className="summary-footer">
-             <div className="summary-totals">
-               <div><span>Build</span><strong>{formatCurrency(buildSubtotal)}</strong></div>
-               <div><span>Finish</span><strong>{formatCurrency(finishSubtotal)}</strong></div>
-               <div className="summary-grand-total"><span>Total:</span><strong>{formatCurrency(total)}</strong></div>
-             </div>
+          <div className="summary-footer">
+            <div className="summary-total-row">
+              <span className="summary-total-label">Total</span>
+              <strong className="summary-total-amount">{formatCurrency(total)}</strong>
+            </div>
+            <div className="summary-affirm-note">
+              or monthly payments with Affirm
+            </div>
 
             <Tooltip
               className="summary-cart-tooltip-wrapper"

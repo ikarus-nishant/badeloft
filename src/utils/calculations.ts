@@ -66,3 +66,48 @@ export function mergedDimensions(config: SinkConfiguration): SinkDimensions {
     bowlSpacing: config.bowlQuantity && config.bowlQuantity !== "single" ? Math.max(100, Number(config.dimensions.bowlSpacing || 100)) : (config.dimensions.bowlSpacing ?? 0),
   };
 }
+
+export interface FormattedFraction {
+  whole: number;
+  fractionNumerator?: number;
+  fractionDenominator?: number;
+  fractionText?: string;
+  formattedText: string;
+}
+
+export function toFractionalInches(mm: number, precision: number = 16): FormattedFraction {
+  if (isNaN(mm) || mm <= 0) {
+    return { whole: 0, formattedText: "0 in" };
+  }
+  const totalInches = mm / 25.4;
+  let whole = Math.floor(totalInches);
+  const remainder = totalInches - whole;
+  let fraction = Math.round(remainder * precision);
+
+  if (fraction === precision) {
+    whole += 1;
+    fraction = 0;
+  }
+
+  if (fraction === 0) {
+    return {
+      whole,
+      formattedText: `${whole} in`,
+    };
+  }
+
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const divisor = gcd(fraction, precision);
+  const num = fraction / divisor;
+  const den = precision / divisor;
+  const fractionText = `${num}/${den}`;
+
+  return {
+    whole,
+    fractionNumerator: num,
+    fractionDenominator: den,
+    fractionText,
+    formattedText: whole === 0 ? `${fractionText} in` : `${whole} ${fractionText} in`,
+  };
+}
+
