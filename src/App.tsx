@@ -4,7 +4,7 @@ import type { ModelViewerElement } from "@google/model-viewer";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
 import { bowlOptions } from "./data/bowlOptions";
 import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
-import { mergedDimensions, toFractionalInches } from "./utils/calculations";
+import { mergedDimensions, toFractionalInches, SINK_PRICE_DISCOUNT, SINK_RETAIL_MARKUP } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
 import { BottomSheet, type SnapPosition } from "./components/BottomSheet";
@@ -236,7 +236,7 @@ function App() {
 
   const extraBowlCount = bowlCount > 1 ? bowlCount - 1 : 0;
   const extraBowlPrice = extraBowlCount * 80;
-  
+
   const packingPrice = 50;
 
   const heightInMeters = (dims.H ?? config.bowl?.size.height ?? 0) / 1000;
@@ -250,11 +250,12 @@ function App() {
 
   const factoryCost = baseSinkPrice + baseDepthPrice + baseHeightPrice + extraBowlPrice + packingPrice;
   const baseBuildSubtotal = Math.round(factoryCost * 1.85) + extraWidthPrice + installationPrice;
-  const buildSubtotal = Math.round(baseBuildSubtotal * 1.7);
+  // Apply 25% price reduction for all sinks in the configurator (SINK_RETAIL_MARKUP = 1.7 * 0.75 = 1.275)
+  const buildSubtotal = Math.round(baseBuildSubtotal * SINK_RETAIL_MARKUP);
   const bowlColorPrice = bowlColor ? (bowlColor === "white" ? 0 : (config.bowl?.colorPrice ?? 100)) : 0;
   const drainCapPrice = selectedDrainFinish ? selectedDrainFinish.price : 0;
   const baseFinishSubtotal = bowlColorPrice + drainCapPrice;
-  const finishSubtotal = Math.round(baseFinishSubtotal * 1.7);
+  const finishSubtotal = Math.round(baseFinishSubtotal * SINK_RETAIL_MARKUP);
   const total = buildSubtotal + finishSubtotal;
 
   const hasAllSelections = Boolean(
@@ -330,7 +331,7 @@ function App() {
   const handleTypeChange = (newType: BowlType) => {
     let targetSize = selectedSize;
     let matching = getFilteredBowls(newType, targetSize, "rear");
-    
+
     if (matching.length === 0) {
       const fallbackSizes: BowlSize[] = ["M", "L", "XL", "XXL", "S"];
       for (const fs of fallbackSizes) {
@@ -341,7 +342,7 @@ function App() {
         }
       }
     }
-    
+
     if (matching.length > 0) {
       updateBowl(matching[0]);
     }
@@ -963,7 +964,7 @@ function App() {
       {idSuffix === "-mobile" && (
         <div className="mobile-sheet-heading">
           <h2 className="desktop-panel-title">Build your sink</h2>
-          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 10-12 weeks.</p>
+          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 9-12 weeks.</p>
         </div>
       )}
       {/* 1. Installation */}
@@ -1246,7 +1247,7 @@ function App() {
           {/* Length Block */}
           <div style={{ display: "grid", gap: "16px" }}>
             <SliderRow label="Width" max={maximumOverallWidth} min={minOverallWidth} value={Number(dims.L ?? 0)} onChange={updateOverallWidth} />
-            
+
             <div className="offset-grid">
               <OffsetControl
                 label="Left"
@@ -1271,7 +1272,7 @@ function App() {
           {/* Width Block */}
           <div style={{ display: "grid", gap: "16px" }}>
             <SliderRow label="Depth" max={maximumOverallDepth} min={minOverallDepth} value={Number(dims.D ?? 0)} onChange={updateOverallDepth} />
-            
+
             <div className="offset-grid">
               <OffsetControl
                 label="Front"
@@ -1492,7 +1493,7 @@ function App() {
         <header className="desktop-panel-header">
           <div className="desktop-panel-header-content">
             <h2 className="desktop-panel-title">Build your sink</h2>
-            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 10-12 weeks.</p>
+            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 9-12 weeks.</p>
           </div>
           <a
             aria-label="Back to site"

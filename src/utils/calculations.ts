@@ -5,6 +5,10 @@ export const EXTRA_WIDTH_ALLOWANCE = 15 * 25.4; // 15 inches (381 mm)
 export const MIN_LEFT_RIGHT = 100; // 3.94 inches
 export const MIN_SPACING = 100; // 3.94 inches
 
+// 25% price reduction applied to all sinks across the configurator
+export const SINK_PRICE_DISCOUNT = 0.25;
+export const SINK_RETAIL_MARKUP = 1.7 * (1 - SINK_PRICE_DISCOUNT); // 1.7 * 0.75 = 1.275
+
 export function getMinOverallWidth(config: SinkConfiguration): number {
   const { bowl, bowlQuantity } = config;
   const bowlLength = bowl?.size.length ?? 500;
