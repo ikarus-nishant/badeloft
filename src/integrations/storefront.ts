@@ -1,5 +1,6 @@
 export const STOREFRONT_CONFIG_ELEMENT_ID = "badeloft-sink-config";
 export const ADD_TO_CART_EVENT = "badeloft:sink:add-to-cart";
+export const CLOSE_EVENT = "badeloft:sink:close";
 
 export interface StorefrontConfig {
   assetBaseUrl: string;

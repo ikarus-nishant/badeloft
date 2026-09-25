@@ -819,7 +819,21 @@ function App() {
   };
 
   const selectedSinkName = bowlDetails[config.bowl?.id ?? ""]?.displayName ?? config.bowl?.name ?? "01";
-  const productTitle = `Custom Sink ${selectedSinkName}`;
+  const productTitle = `Basin Studio ${selectedSinkName}`;
+
+  const handleBackToSite = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    let isEmbedded = false;
+    try {
+      isEmbedded = Boolean(window.parent && window.parent !== window);
+    } catch {
+      isEmbedded = true;
+    }
+
+    if (isEmbedded) {
+      e.preventDefault();
+      window.parent.postMessage({ type: "badeloft:sink:close" }, "https://www.badeloft.com");
+    }
+  };
 
   const handleArModelReady = useCallback((model: Blob) => {
     const nextUrl = URL.createObjectURL(model);
@@ -963,8 +977,8 @@ function App() {
     <div className="panel-scroll" id={`configurator-panel${idSuffix}`}>
       {idSuffix === "-mobile" && (
         <div className="mobile-sheet-heading">
-          <h2 className="desktop-panel-title">Build your sink</h2>
-          <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 9-12 weeks.</p>
+          <h2 className="desktop-panel-title">Basin Studio</h2>
+          <p className="desktop-panel-desc">Build your sink. Cast to order in stone resin. Ships in 9-12 weeks.</p>
         </div>
       )}
       {/* 1. Installation */}
@@ -1398,16 +1412,7 @@ function App() {
           aria-label="Back to site"
           className="mobile-header-back"
           href="https://www.badeloft.com/"
-          onClick={(e) => {
-            try {
-              if (window.top && window.top !== window) {
-                e.preventDefault();
-                window.top.location.href = "https://www.badeloft.com/";
-              }
-            } catch {
-              // target="_top" handles cross-origin fallback
-            }
-          }}
+          onClick={handleBackToSite}
           rel="noopener noreferrer"
           target="_top"
         >
@@ -1492,23 +1497,14 @@ function App() {
       <aside className="right-panel desktop-only-panel">
         <header className="desktop-panel-header">
           <div className="desktop-panel-header-content">
-            <h2 className="desktop-panel-title">Build your sink</h2>
-            <p className="desktop-panel-desc">Cast to order in stone resin. Ships in 9-12 weeks.</p>
+            <h1 className="desktop-panel-title">Basin Studio</h1>
+            <p className="desktop-panel-desc">Build your sink. Cast to order in stone resin. Ships in 9-12 weeks.</p>
           </div>
           <a
             aria-label="Back to site"
             className="back-to-site-btn"
             href="https://www.badeloft.com/"
-            onClick={(e) => {
-              try {
-                if (window.top && window.top !== window) {
-                  e.preventDefault();
-                  window.top.location.href = "https://www.badeloft.com/";
-                }
-              } catch {
-                // target="_top" handles cross-origin fallback
-              }
-            }}
+            onClick={handleBackToSite}
             rel="noopener noreferrer"
             target="_top"
             title="Back to site"

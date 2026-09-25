@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Custom Sink Configurator</title>
+    <title>Basin Studio | Badeloft</title>
   </head>
   <body>
     <div id="root"></div>
@@ -16,6 +16,17 @@
       }
     </script>
     <script>
+      window.addEventListener("badeloft:sink:close", function () {
+        if (window.parent === window) return;
+
+        window.parent.postMessage(
+          {
+            type: "badeloft:sink:close"
+          },
+          "https://www.badeloft.com"
+        );
+      });
+
       window.addEventListener("badeloft:sink:add-to-cart", function (event) {
         if (window.parent === window) return;
 
