@@ -1358,7 +1358,7 @@ function App() {
           </section>
         ) : (
           <div className="drain-integrated-notice">
-            Ramp sinks feature an elegant concealed slot drain integrated into the basin slope. No separate drain cap is required.
+            Ramp sinks use a concealed slot drain integrated into the basin slope, with a 1¼" drain cast into the sink bottom. Includes a 1¼" tailpiece, so no separate drain cap is needed.
           </div>
         )}
       </NumberedStep>
