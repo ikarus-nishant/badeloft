@@ -38,6 +38,20 @@ export interface SinkCartPayload {
       label: string;
     };
     finish: "glossy" | "matte";
+    faucetHoles: {
+      id: "none" | "single" | "3_hole_2in" | "3_hole_3in";
+      label: string;
+      holeCount: number;
+      spacingInches?: number;
+      measurementsInches?: {
+        holeDiameter?: number;
+        rearEdgeToCenter: number;
+        basinToCenter: number;
+        leftEdgeToCenter: number;
+        rightEdgeToCenter: number;
+        spacingBetweenHoles?: number;
+      };
+    };
     drainCapFinish?: "chrome" | "black" | "brushed-nickel" | "glossy-white" | "matte-white";
     drainEdge: "left" | "rear" | "right";
     dimensionsInches: {

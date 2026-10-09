@@ -3,7 +3,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Box3, BoxGeometry, BufferGeometry, Group, Line as ThreeLine, LineBasicMaterial, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, CylinderGeometry, Group, Line as ThreeLine, LineBasicMaterial, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
@@ -80,6 +80,7 @@ interface CountertopModelProps {
   modelUrl?: string;
   bowlColor: string;
   bowlFinish: BowlFinish;
+  faucetHoles?: Array<{ x: number; z: number }>;
 }
 
 const unit = 180;
@@ -225,7 +226,14 @@ const bowlModelUrls: Record<string, string> = {
   "UB-05-XL": resolveModelUrl("UB-05-XL.glb"),
 };
 
-function cutGeometryWithBowls(baseGeometry: BoxGeometry, bowls: BowlPlacement[], bowlWidth: number, bowlDepth: number, height: number) {
+function cutGeometryWithBowls(
+  baseGeometry: BoxGeometry,
+  bowls: BowlPlacement[],
+  bowlWidth: number,
+  bowlDepth: number,
+  height: number,
+  faucetHoles: Array<{ x: number; z: number }> = []
+) {
   const evaluator = new Evaluator();
   evaluator.useGroups = false;
 
@@ -237,6 +245,14 @@ function cutGeometryWithBowls(baseGeometry: BoxGeometry, bowls: BowlPlacement[],
     cutter.position.set(bowl.x, 0, bowl.z);
     cutter.updateMatrixWorld();
     result = evaluator.evaluate(result, cutter, SUBTRACTION) as Brush;
+  });
+
+  const holeRadius = (35 / 2) / unit;
+  faucetHoles.forEach((hole) => {
+    const holeCutter = new Brush(new CylinderGeometry(holeRadius, holeRadius, height * 2.5, 24));
+    holeCutter.position.set(hole.x, height / 2, hole.z);
+    holeCutter.updateMatrixWorld();
+    result = evaluator.evaluate(result, holeCutter, SUBTRACTION) as Brush;
   });
 
   return result.geometry;
@@ -255,7 +271,7 @@ function getScaledModelFootprint(scene: Object3D, targetWidth: number, targetDep
   };
 }
 
-function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, length, modelUrl }: CountertopModelProps) {
+function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, length, modelUrl, faucetHoles = [] }: CountertopModelProps) {
   const { scene } = useGLTF(modelUrl ?? bowlModelUrls["UB-04-M"]);
   const cutterFootprint = useMemo(() => {
     if (!modelUrl) {
@@ -281,21 +297,36 @@ function useCountertopGeometries({ bowls, bowlDepth, bowlWidth, depth, height, l
           Math.max(0.001, cutterFootprint.width - connectorSeamOverlap * 2),
           Math.max(0.001, cutterFootprint.depth - connectorSeamOverlap * 2),
           totalHeight,
+          faucetHoles,
         ),
       ),
     };
-  }, [bowls, cutterFootprint.depth, cutterFootprint.width, depth, height, length]);
+  }, [bowls, cutterFootprint.depth, cutterFootprint.width, depth, height, length, faucetHoles]);
 }
 
 function CountertopModel(props: CountertopModelProps) {
   const geometries = useCountertopGeometries(props);
-  const { bowlColor, bowlFinish } = props;
+  const { bowlColor, bowlFinish, faucetHoles = [], height } = props;
   const surfaceRoughness = bowlFinish === "matte" ? 0.72 : 0.2;
+  const totalHeight = height + countertopCapThickness;
+  const holeRadius = (35 / 2) / unit;
 
   return (
-    <mesh castShadow geometry={geometries.base} receiveShadow>
-      <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
-    </mesh>
+    <group>
+      <mesh castShadow geometry={geometries.base} receiveShadow>
+        <meshStandardMaterial color={bowlColor} roughness={surfaceRoughness} metalness={0.04} />
+      </mesh>
+      {faucetHoles.map((hole, index) => (
+        <mesh
+          key={index}
+          position={[hole.x, totalHeight / 2, hole.z]}
+          receiveShadow
+        >
+          <cylinderGeometry args={[holeRadius * 0.98, holeRadius * 0.98, totalHeight * 0.99, 24, 1, true]} />
+          <meshStandardMaterial color="#2b2d31" roughness={0.92} metalness={0.02} side={2} />
+        </mesh>
+      ))}
+    </group>
   );
 }
 
@@ -536,6 +567,32 @@ function Measurements({ show, config }: MeasurementsProps) {
   const lineStartZ = innerRearZ + cornerSpace;
   const tickSize = Math.min(0.018, bowlSceneDepth * 0.025);
 
+  const quantity = config.bowlQuantity ?? "single";
+  const bowlCount = quantity === "triple" ? 3 : quantity === "double" ? 2 : 1;
+  const singleBowlLengthMm = Math.max(240, Number(dims.L1 || 500));
+  const singleBowlSceneLength = toScene(singleBowlLengthMm);
+  const bowlInternalGap = bowlCount > 1 ? toScene(Number(dims.bowlSpacing || 0)) : 0;
+
+  const faucetHolesType = config.faucetHoles ?? "none";
+  const hasFaucetHoles = faucetHolesType !== "none";
+
+  const topToCenterIn = ((rearInset / 2) / 25.4).toFixed(2);
+  const centerToBasinIn = ((rearInset / 2) / 25.4).toFixed(2);
+  const leftToFirstCenterIn = ((leftInset + singleBowlLengthMm / 2) / 25.4).toFixed(2);
+  const rightToLastCenterIn = ((rightInset + singleBowlLengthMm / 2) / 25.4).toFixed(2);
+
+  const spacingInches = faucetHolesType === "3_hole_2in" ? 2 : (faucetHolesType === "3_hole_3in" ? 3 : 0);
+  const spacingMm = spacingInches * 25.4;
+
+  const faucetDeckZ = -sceneDepth / 2 + sceneRearInset / 2;
+  const topEdgeZ = -sceneDepth / 2;
+  const basinRearRimZ = -sceneDepth / 2 + sceneRearInset;
+
+  const bowlPositions = Array.from({ length: bowlCount }, (_, index) => ({
+    x: -sceneLength / 2 + sceneLeftInset + singleBowlSceneLength / 2 + index * (singleBowlSceneLength + bowlInternalGap),
+    z: faucetDeckZ,
+  }));
+
   return (
     <group>
       {/* 1. Sink Measurements placed inside the sink basin */}
@@ -614,6 +671,85 @@ function Measurements({ show, config }: MeasurementsProps) {
           <div className="measurement-label">{heightInches} in</div>
         </Html>
       </group>
+
+      {/* 5. Faucet Deck & Hole Measurements */}
+      {hasFaucetHoles && (
+        <group>
+          {/* Top/Back Edge to Faucet Center & Faucet Center to Basin Rim */}
+          {bowlPositions.map((pos, idx) => {
+            const lineX = pos.x - Math.min(0.24, singleBowlSceneLength * 0.3);
+            return (
+              <group key={`faucet-deck-clearance-${idx}`}>
+                {/* Back Edge to Faucet Center */}
+                <Line start={[lineX, rimLineY, topEdgeZ]} end={[lineX, rimLineY, faucetDeckZ]} color={color} />
+                <Line start={[lineX - tickSize, rimLineY, topEdgeZ]} end={[lineX + tickSize, rimLineY, topEdgeZ]} color={color} />
+                <Line start={[lineX - tickSize, rimLineY, faucetDeckZ]} end={[lineX + tickSize, rimLineY, faucetDeckZ]} color={color} />
+                <Html position={[lineX - 0.06, rimLabelY, (topEdgeZ + faucetDeckZ) / 2]} center>
+                  <div className="measurement-label">{topToCenterIn} in (Top)</div>
+                </Html>
+
+                {/* Faucet Center to Basin Rim */}
+                <Line start={[lineX, rimLineY, faucetDeckZ]} end={[lineX, rimLineY, basinRearRimZ]} color={color} />
+                <Line start={[lineX - tickSize, rimLineY, basinRearRimZ]} end={[lineX + tickSize, rimLineY, basinRearRimZ]} color={color} />
+                <Html position={[lineX - 0.06, rimLabelY, (faucetDeckZ + basinRearRimZ) / 2]} center>
+                  <div className="measurement-label">{centerToBasinIn} in (Basin)</div>
+                </Html>
+
+                {/* 3-Hole Spacing Dimension Line & Annotation */}
+                {faucetHolesType !== "single" && (
+                  <group>
+                    <Line
+                      start={[pos.x - toScene(spacingMm), rimLineY, faucetDeckZ]}
+                      end={[pos.x + toScene(spacingMm), rimLineY, faucetDeckZ]}
+                      color={color}
+                    />
+                    <Line
+                      start={[pos.x - toScene(spacingMm), rimLineY, faucetDeckZ - tickSize]}
+                      end={[pos.x - toScene(spacingMm), rimLineY, faucetDeckZ + tickSize]}
+                      color={color}
+                    />
+                    <Line
+                      start={[pos.x, rimLineY, faucetDeckZ - tickSize]}
+                      end={[pos.x, rimLineY, faucetDeckZ + tickSize]}
+                      color={color}
+                    />
+                    <Line
+                      start={[pos.x + toScene(spacingMm), rimLineY, faucetDeckZ - tickSize]}
+                      end={[pos.x + toScene(spacingMm), rimLineY, faucetDeckZ + tickSize]}
+                      color={color}
+                    />
+                    <Html position={[pos.x, rimLabelY + 0.015, faucetDeckZ]} center>
+                      <div className="measurement-label">
+                        {spacingInches} in apart
+                      </div>
+                    </Html>
+                  </group>
+                )}
+              </group>
+            );
+          })}
+
+          {/* Left Edge to First Faucet Center */}
+          <group>
+            <Line start={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035]} end={[bowlPositions[0].x, rimLineY, topEdgeZ + 0.035]} color={color} />
+            <Line start={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
+            <Line start={[bowlPositions[0].x, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[bowlPositions[0].x, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
+            <Html position={[(-sceneLength / 2 + bowlPositions[0].x) / 2, rimLabelY, topEdgeZ + 0.035]} center>
+              <div className="measurement-label">Left to Faucet: {leftToFirstCenterIn} in</div>
+            </Html>
+          </group>
+
+          {/* Right Edge to Last Faucet Center */}
+          <group>
+            <Line start={[bowlPositions[bowlPositions.length - 1].x, rimLineY, topEdgeZ + 0.035]} end={[sceneLength / 2, rimLineY, topEdgeZ + 0.035]} color={color} />
+            <Line start={[bowlPositions[bowlPositions.length - 1].x, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[bowlPositions[bowlPositions.length - 1].x, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
+            <Line start={[sceneLength / 2, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[sceneLength / 2, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
+            <Html position={[(bowlPositions[bowlPositions.length - 1].x + sceneLength / 2) / 2, rimLabelY, topEdgeZ + 0.035]} center>
+              <div className="measurement-label">Right to Faucet: {rightToLastCenterIn} in</div>
+            </Html>
+          </group>
+        </group>
+      )}
     </group>
   );
 }
@@ -651,6 +787,32 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
     z: -sceneDepth / 2 + sceneTopInset + sceneBowlDepth / 2,
   }));
 
+  const faucetDeckZ = -sceneDepth / 2 + sceneTopInset / 2;
+  const faucetHoleType = config.faucetHoles ?? "none";
+  const faucetHoles = useMemo(() => {
+    if (faucetHoleType === "none") return [];
+
+    const spacing2Inches = toScene(2 * 25.4);
+    const spacing3Inches = toScene(3 * 25.4);
+    const holes: Array<{ x: number; z: number }> = [];
+
+    bowls.forEach((bowl) => {
+      if (faucetHoleType === "single") {
+        holes.push({ x: bowl.x, z: faucetDeckZ });
+      } else if (faucetHoleType === "3_hole_2in") {
+        holes.push({ x: bowl.x - spacing2Inches, z: faucetDeckZ });
+        holes.push({ x: bowl.x, z: faucetDeckZ });
+        holes.push({ x: bowl.x + spacing2Inches, z: faucetDeckZ });
+      } else if (faucetHoleType === "3_hole_3in") {
+        holes.push({ x: bowl.x - spacing3Inches, z: faucetDeckZ });
+        holes.push({ x: bowl.x, z: faucetDeckZ });
+        holes.push({ x: bowl.x + spacing3Inches, z: faucetDeckZ });
+      }
+    });
+
+    return holes;
+  }, [bowls, faucetDeckZ, faucetHoleType]);
+
   return (
     <>
       <group ref={arModelRef} rotation={[0, -0.18, 0]}>
@@ -672,6 +834,7 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
           bowlWidth={sceneBowlLength}
           bowls={bowls}
           depth={sceneDepth}
+          faucetHoles={faucetHoles}
           height={sceneHeight}
           length={sceneLength}
           modelUrl={modelUrl}

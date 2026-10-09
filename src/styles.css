@@ -2255,6 +2255,206 @@ svg text {
   color: #63656d;
 }
 
+/* Faucet Holes Cards Styling */
+.faucet-holes-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.faucet-hole-card {
+  background: #fbfaf8;
+  border: 1.5px solid #e5e3df;
+  border-radius: 6px;
+  padding: 12px 14px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.faucet-hole-card:hover {
+  background: #fefdfb;
+  border-color: #d1cfcb;
+}
+
+.faucet-hole-card.selected {
+  background: #ffffff;
+  border-color: #1c1c1c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.faucet-hole-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 28px;
+  color: #8c8f96;
+  transition: color 0.2s ease;
+}
+
+.faucet-hole-card.selected .faucet-hole-diagram {
+  color: #1c1c1c;
+}
+
+.faucet-icon-svg {
+  width: 52px;
+  height: 26px;
+  display: block;
+}
+
+.faucet-hole-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.faucet-hole-card-title {
+  font-size: 13.5px;
+  font-weight: 550;
+  color: #555761;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.faucet-hole-card.selected .faucet-hole-card-title {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.faucet-hole-card-desc {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: #8c8f96;
+  margin: 0;
+  font-weight: 400;
+}
+
+.faucet-hole-card.selected .faucet-hole-card-desc {
+  color: #63656d;
+}
+
+.faucet-hole-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #737783;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+/* Faucet Drilling & Placement Technical Measurements Panel */
+.faucet-measurements-panel {
+  margin-top: 14px;
+  background: #f7f6f3;
+  border: 1px solid #e7e5e1;
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faucet-measurements-panel.none-panel {
+  background: #f9f9f8;
+  border-color: #ebeae6;
+  padding: 12px 14px;
+}
+
+.faucet-measurements-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.faucet-measurements-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2b2d31;
+  letter-spacing: 0.01em;
+}
+
+.faucet-measurements-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8c6e43;
+  background: rgba(163, 132, 96, 0.12);
+  padding: 2px 8px;
+  border-radius: 12px;
+  letter-spacing: 0.02em;
+}
+
+.faucet-measurements-pill.neutral {
+  color: #63656d;
+  background: #eae9e5;
+}
+
+.faucet-measurements-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.faucet-measure-box {
+  background: #ffffff;
+  border: 1px solid #e8e6e2;
+  border-radius: 6px;
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.faucet-measure-label {
+  font-size: 11px;
+  font-weight: 550;
+  color: #717580;
+  line-height: 1.2;
+}
+
+.faucet-measure-val {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #1a1a1a;
+  line-height: 1.25;
+}
+
+.faucet-measure-sub {
+  font-size: 11.5px;
+  font-weight: 450;
+  color: #8b8f98;
+}
+
+.faucet-measure-caption {
+  font-size: 10.5px;
+  color: #9ea2ab;
+  line-height: 1.2;
+}
+
+.faucet-measure-note {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #666973;
+  background: rgba(255, 255, 255, 0.65);
+  border-left: 2px solid #a38460;
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+}
+
+.faucet-none-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #6d707b;
+  margin: 0;
+}
+
 .bowl-model-card-grid {
   display: grid;
   gap: 14px;
@@ -3285,6 +3485,47 @@ svg text {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
+  }
+
+  /* Faucet Holes Cards: Full-Width Rows (56–64px) */
+  .faucet-holes-card-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .faucet-hole-card {
+    min-height: 56px;
+    height: auto;
+    padding: 10px 14px;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    box-sizing: border-box;
+  }
+
+  .faucet-hole-diagram {
+    flex-shrink: 0;
+    width: 48px;
+    justify-content: center;
+  }
+
+  .faucet-measurements-panel {
+    padding: 11px;
+    gap: 10px;
+  }
+
+  .faucet-measurements-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .faucet-measure-box {
+    padding: 8px;
+  }
+
+  .faucet-measure-val {
+    font-size: 12.5px;
   }
 
   /* Bowl Model Cards: Full-Width Rows (56–64px) */

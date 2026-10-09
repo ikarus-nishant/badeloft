@@ -34,7 +34,7 @@ The payload contains:
 - `productHandle`, `currency`, and numeric price totals.
 - Bowl model ID/name, numeric bowl count, quantity ID, shape, and size.
 - Installation ID/label and the fixed `undermount` sink mount.
-- Color ID/label/hex, surface finish, drain cap finish, and drain edge.
+- Color ID/label/hex, surface finish, faucet holes, drain cap finish, and drain edge.
 - Numeric inch measurements under `selection.dimensionsInches`.
 - Overall, bowl, inner bowl, and offset measurements.
 - Dimension codes `L`, `L1`, `L2`, `L3`, `D`, `D1`, `D2`, `D3`, `H`, and

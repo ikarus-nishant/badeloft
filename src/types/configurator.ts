@@ -4,6 +4,8 @@ export type BowlQuantity = "single" | "double" | "triple";
 
 export type MountingType = "wall_mounted" | "countertop" | "undermount";
 
+export type FaucetHoleOption = "none" | "single" | "3_hole_2in" | "3_hole_3in";
+
 export interface BowlOption {
   id: string;
   name: string;
@@ -39,5 +41,6 @@ export interface SinkConfiguration {
   bowl?: BowlOption;
   bowlQuantity?: BowlQuantity;
   mountingType?: MountingType;
+  faucetHoles?: FaucetHoleOption;
   dimensions: SinkDimensions;
 }

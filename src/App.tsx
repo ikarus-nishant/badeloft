@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { ModelViewerElement } from "@google/model-viewer";
 import { Dimension3DPreview } from "./components/Dimension3DPreview";
 import { bowlOptions } from "./data/bowlOptions";
-import type { BowlOption, BowlQuantity, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
+import type { BowlOption, BowlQuantity, FaucetHoleOption, MountingType, SinkConfiguration, SinkDimensions } from "./types/configurator";
 import { mergedDimensions, toFractionalInches, SINK_PRICE_DISCOUNT, SINK_RETAIL_MARKUP } from "./utils/calculations";
 import { Card } from "./components/Card";
 import { Tooltip } from "./components/Tooltip";
@@ -20,6 +20,7 @@ const initialConfig: SinkConfiguration = {
   bowlQuantity: "single",
   mountingType: "wall_mounted",
   sinkType: "CUSTOM_SINGLE",
+  faucetHoles: "none",
   dimensions: {
     L2: defaultInitialOffset,
     L3: defaultInitialOffset,
@@ -66,6 +67,86 @@ const drainFinishOptions: Array<{ id: DrainFinish; label: string; price: number 
   { id: "glossy-white", label: "Glossy White", price: 29 },
   { id: "matte-white", label: "Matte White", price: 29 },
 ];
+
+interface FaucetHoleConfig {
+  id: FaucetHoleOption;
+  label: string;
+  sublabel: string;
+  holeCount: number;
+  spacingInches?: number;
+}
+
+const faucetHoleOptions: FaucetHoleConfig[] = [
+  {
+    id: "none",
+    label: "None (0 holes)",
+    sublabel: "No faucet holes (for wall-mounted faucets)",
+    holeCount: 0,
+  },
+  {
+    id: "single",
+    label: "Center (single)",
+    sublabel: "1 hole centered behind each basin",
+    holeCount: 1,
+  },
+  {
+    id: "3_hole_2in",
+    label: "3 holes apart 2 inches",
+    sublabel: "3 holes spaced 2″ apart",
+    holeCount: 3,
+    spacingInches: 2,
+  },
+  {
+    id: "3_hole_3in",
+    label: "3 holes apart 3 inches",
+    sublabel: "3 holes spaced 3″ apart",
+    holeCount: 3,
+    spacingInches: 3,
+  },
+];
+
+function renderFaucetHoleIcon(id: FaucetHoleOption) {
+  if (id === "none") {
+    return (
+      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
+        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.5 2.5" opacity="0.4" />
+        <circle cx="24" cy="12" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" opacity="0.6" />
+        <line x1="19" y1="17" x2="29" y2="7" stroke="currentColor" strokeWidth="1.6" opacity="0.75" />
+      </svg>
+    );
+  }
+  if (id === "single") {
+    return (
+      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
+        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.5 2.5" opacity="0.25" />
+        <circle cx="24" cy="12" r="5" fill="currentColor" />
+        <circle cx="24" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.5 1.5" opacity="0.35" />
+      </svg>
+    );
+  }
+  if (id === "3_hole_2in") {
+    return (
+      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
+        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2.5 2.5" opacity="0.2" />
+        <circle cx="15" cy="12" r="3.5" fill="currentColor" />
+        <circle cx="24" cy="12" r="4.5" fill="currentColor" />
+        <circle cx="33" cy="12" r="3.5" fill="currentColor" />
+        <path d="M 15 18 L 15 20 L 33 20 L 33 18" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.5" />
+        <text x="24" y="23.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="700" opacity="0.75">2″</text>
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
+      <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2.5 2.5" opacity="0.2" />
+      <circle cx="9" cy="12" r="3.5" fill="currentColor" />
+      <circle cx="24" cy="12" r="4.5" fill="currentColor" />
+      <circle cx="39" cy="12" r="3.5" fill="currentColor" />
+      <path d="M 9 18 L 9 20 L 39 20 L 39 18" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.5" />
+      <text x="24" y="23.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="700" opacity="0.75">3″</text>
+    </svg>
+  );
+}
 
 const countByQuantity: Record<BowlQuantity, number> = {
   single: 1,
@@ -756,6 +837,13 @@ function App() {
     }));
   };
 
+  const updateFaucetHoles = (faucetHoles: FaucetHoleOption) => {
+    setConfig((previous) => ({
+      ...previous,
+      faucetHoles,
+    }));
+  };
+
   const updateOverallWidth = (value: number) => {
     setConfig((previous) => {
       const count = countByQuantity[previous.bowlQuantity ?? "single"];
@@ -872,6 +960,37 @@ function App() {
     setShowArPreview(true);
   };
 
+  const selectedFaucetHoles = config.faucetHoles ?? "none";
+  const faucetHoleSummary = selectedFaucetHoles === "none"
+    ? "None (0 holes)"
+    : (selectedFaucetHoles === "single"
+      ? "Center (single)"
+      : (selectedFaucetHoles === "3_hole_2in"
+        ? "3 holes (2 in apart)"
+        : "3 holes (3 in apart)"));
+
+  const rearDeckMm = Number(dims.D2 ?? 100);
+  const leftDeckMm = Number(dims.L2 ?? 131);
+  const rightDeckMm = Number(dims.L3 ?? 131);
+  const currentBowlLengthMm = config.bowl?.size.length ?? 500;
+
+  const topToFaucetCenterMm = rearDeckMm / 2;
+  const topToFaucetCenterIn = (topToFaucetCenterMm / 25.4).toFixed(2);
+
+  const faucetCenterToBasinMm = rearDeckMm / 2;
+  const faucetCenterToBasinIn = (faucetCenterToBasinMm / 25.4).toFixed(2);
+
+  const topToHoleEdgeMm = Math.max(0, (rearDeckMm - 35) / 2);
+  const topToHoleEdgeIn = (topToHoleEdgeMm / 25.4).toFixed(2);
+
+  const leftToFaucetCenterMm = leftDeckMm + (currentBowlLengthMm / 2);
+  const leftToFaucetCenterIn = (leftToFaucetCenterMm / 25.4).toFixed(2);
+
+  const rightToFaucetCenterMm = rightDeckMm + (currentBowlLengthMm / 2);
+  const rightToFaucetCenterIn = (rightToFaucetCenterMm / 25.4).toFixed(2);
+
+  const spacingInchesVal = selectedFaucetHoles === "3_hole_2in" ? 2 : (selectedFaucetHoles === "3_hole_3in" ? 3 : 0);
+
   const handleAddToCart = () => {
     if (isCartDisabled || cartStatus === "loading") return;
     if (!bowlColor || (!isRamp && !effectiveDrainFinish)) return;
@@ -908,6 +1027,24 @@ function App() {
         },
         color: { hex: selectedBowlColor, id: bowlColor, label: selectedBowlColorLabel },
         finish: bowlFinish,
+        faucetHoles: {
+          id: selectedFaucetHoles,
+          label: selectedFaucetHoles === "none"
+            ? "None (0 holes)"
+            : (selectedFaucetHoles === "single"
+              ? "Center (single)"
+              : (selectedFaucetHoles === "3_hole_2in" ? "3 holes apart 2 inches" : "3 holes apart 3 inches")),
+          holeCount: selectedFaucetHoles === "none" ? 0 : (selectedFaucetHoles === "single" ? 1 : 3),
+          ...(selectedFaucetHoles === "3_hole_2in" ? { spacingInches: 2 } : {}),
+          ...(selectedFaucetHoles === "3_hole_3in" ? { spacingInches: 3 } : {}),
+          measurementsInches: selectedFaucetHoles !== "none" ? {
+            rearEdgeToCenter: Number(topToFaucetCenterIn),
+            basinToCenter: Number(faucetCenterToBasinIn),
+            leftEdgeToCenter: Number(leftToFaucetCenterIn),
+            rightEdgeToCenter: Number(rightToFaucetCenterIn),
+            ...(spacingInchesVal > 0 ? { spacingBetweenHoles: spacingInchesVal } : {}),
+          } : undefined,
+        },
         ...(!isRamp && effectiveDrainFinish ? { drainCapFinish: effectiveDrainFinish } : {}),
         drainEdge: selectedDrainEdge,
         dimensionsInches: {
@@ -951,6 +1088,11 @@ function App() {
     const finish = `${bowlFinish === "glossy" ? "Glossy" : "Matte"} ${selectedBowlColorLabel || "White"}`.trim();
     const type = selectedBowlType === "tilt" ? "ramp" : selectedBowlType === "round" ? "oval" : "trough";
     const bowlText = `${bowlCount} ${type} bowl${bowlCount > 1 ? "s" : ""}`;
+    const faucetHolesText = selectedFaucetHoles === "none"
+      ? "No faucet holes"
+      : (selectedFaucetHoles === "single"
+        ? "Center hole"
+        : (selectedFaucetHoles === "3_hole_2in" ? "3 holes (2″ apart)" : "3 holes (3″ apart)"));
     const drainEdgeText = selectedBowlType === "tilt"
       ? `${selectedDrainEdge.charAt(0).toUpperCase() + selectedDrainEdge.slice(1)} drain`
       : "Center drain";
@@ -959,13 +1101,14 @@ function App() {
     const sizeText = `${widthIn} × ${depthIn} in`;
     const drainCapText = isRamp ? "Concealed slot" : `${selectedDrainFinish?.label ?? "Chrome"} cap`;
 
-    return `${mounting} · ${finish} · ${bowlText} · ${drainEdgeText} · ${sizeText} · ${drainCapText}`;
+    return `${mounting} · ${finish} · ${bowlText} · ${faucetHolesText} · ${drainEdgeText} · ${sizeText} · ${drainCapText}`;
   }, [
     config.mountingType,
     bowlFinish,
     selectedBowlColorLabel,
     selectedBowlType,
     bowlCount,
+    selectedFaucetHoles,
     selectedDrainEdge,
     dims.L,
     dims.D,
@@ -1315,12 +1458,47 @@ function App() {
         </section>
       </NumberedStep>
 
-      {/* 6. Drain cap */}
+      {/* 6. Faucet holes */}
       <NumberedStep
         isOpen={openStep === 6}
         onToggle={() => setOpenStep((prev) => (prev === 6 ? null : 6))}
-        priceDelta={!isRamp && selectedDrainFinish && selectedDrainFinish.price > 0 ? `+${formatCurrency(selectedDrainFinish.price)}` : undefined}
         stepNumber={6}
+        summary={faucetHoleSummary}
+        title="Faucet holes"
+      >
+        <section className="control-section">
+          <div className="section-heading">
+            <span>Deck Drilling Configuration</span>
+            {/* <strong style={{ color: "#a38460" }}>Included</strong> */}
+          </div>
+          <div className="faucet-holes-card-grid">
+            {faucetHoleOptions.map((option) => (
+              <button
+                className={`faucet-hole-card ${selectedFaucetHoles === option.id ? "selected" : ""}`}
+                key={option.id}
+                onClick={() => updateFaucetHoles(option.id)}
+                type="button"
+              >
+                <div className="faucet-hole-diagram" aria-hidden="true">
+                  {renderFaucetHoleIcon(option.id)}
+                </div>
+                <div className="faucet-hole-card-text">
+                  <span className="faucet-hole-card-title">{option.label}</span>
+                  <span className="faucet-hole-card-desc">{option.sublabel}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+        </section>
+      </NumberedStep>
+
+      {/* 7. Drain cap */}
+      <NumberedStep
+        isOpen={openStep === 7}
+        onToggle={() => setOpenStep((prev) => (prev === 7 ? null : 7))}
+        priceDelta={!isRamp && selectedDrainFinish && selectedDrainFinish.price > 0 ? `+${formatCurrency(selectedDrainFinish.price)}` : undefined}
+        stepNumber={7}
         summary={isRamp ? "Concealed slot" : `${selectedDrainFinish?.label ?? "Chrome"} drain cap`}
         title="Drain cap"
       >
@@ -1684,6 +1862,37 @@ function App() {
                     <span className="spec-val-secondary">Included</span>
                   </div>
                 </div>
+                <div className="spec-row">
+                  <span className="spec-label">Faucet holes</span>
+                  <div className="spec-value">
+                    <strong className="spec-val-primary">
+                      {selectedFaucetHoles === "none" && "None (0 holes)"}
+                      {selectedFaucetHoles === "single" && "Center (single)"}
+                      {selectedFaucetHoles === "3_hole_2in" && "3 holes (2″ spacing)"}
+                      {selectedFaucetHoles === "3_hole_3in" && "3 holes (3″ spacing)"}
+                    </strong>
+                    <span className="spec-val-secondary">
+                      {selectedFaucetHoles === "none"
+                        ? "Wall-mount ready"
+                        : `Top: ${topToFaucetCenterIn}″ · Basin: ${faucetCenterToBasinIn}″`}
+                    </span>
+                  </div>
+                </div>
+                {selectedFaucetHoles !== "none" && (
+                  <div className="spec-row">
+                    <span className="spec-label">Faucet placement</span>
+                    <div className="spec-value">
+                      <strong className="spec-val-primary">
+                        Centered (L {leftToFaucetCenterIn}″ · R {rightToFaucetCenterIn}″)
+                      </strong>
+                      <span className="spec-val-secondary">
+                        {spacingInchesVal > 0
+                          ? `${spacingInchesVal}″ apart`
+                          : "Centered on rear deck"}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 {!isRamp && selectedDrainFinish && (
                   <div className="spec-row">
                     <span className="spec-label">Drain cap</span>
@@ -1748,7 +1957,7 @@ function App() {
                 id="summary-team-notes"
                 className="summary-notes-textarea"
                 onChange={(event) => setSpecialInstructions(event.target.value)}
-                placeholder="Anything we should know about your project, e.g. 1 faucet hole centered in back of the bowl"
+                placeholder="Anything we should know about your project, e.g. custom corner radius, plumbing specifics, or job site notes"
                 value={specialInstructions}
                 rows={3}
               />
