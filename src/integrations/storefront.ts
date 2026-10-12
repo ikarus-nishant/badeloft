@@ -39,7 +39,7 @@ export interface SinkCartPayload {
     };
     finish: "glossy" | "matte";
     faucetHoles: {
-      id: "none" | "single" | "3_hole_2in" | "3_hole_3in";
+      id: "none" | "single" | "4_inch_centerset" | "centerset" | "widespread" | "3_hole_2in" | "3_hole_3in";
       label: string;
       holeCount: number;
       spacingInches?: number;

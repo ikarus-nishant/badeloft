@@ -71,79 +71,64 @@ const drainFinishOptions: Array<{ id: DrainFinish; label: string; price: number 
 interface FaucetHoleConfig {
   id: FaucetHoleOption;
   label: string;
+  badge: string;
   sublabel: string;
   holeCount: number;
   spacingInches?: number;
+  iconPath?: string;
 }
 
 const faucetHoleOptions: FaucetHoleConfig[] = [
   {
     id: "none",
     label: "None (0 holes)",
+    badge: "0 holes",
     sublabel: "No faucet holes (for wall-mounted faucets)",
     holeCount: 0,
   },
   {
     id: "single",
-    label: "Center (single)",
-    sublabel: "1 hole centered behind each basin",
+    label: "Single hole",
+    badge: "1 hole",
+    sublabel: "One hole for faucet installation.",
     holeCount: 1,
+    iconPath: "assets/single_hole_faucet.svg",
   },
   {
-    id: "3_hole_2in",
-    label: "3 holes apart 2 inches",
-    sublabel: "3 holes spaced 2″ apart",
+    id: "4_inch_centerset",
+    label: "4 inches centerset",
+    badge: "3 holes 4″ apart",
+    sublabel: "Holes are 4 inches apart. Fits most standard bathroom faucets.",
     holeCount: 3,
-    spacingInches: 2,
+    spacingInches: 4,
+    iconPath: "assets/4_inch_centerset_faucet.svg",
   },
   {
-    id: "3_hole_3in",
-    label: "3 holes apart 3 inches",
-    sublabel: "3 holes spaced 3″ apart",
+    id: "widespread",
+    label: "Widespread",
+    badge: "3 holes 8″ apart",
+    sublabel: "Widespread installation for a more spacious look and design flexibility.",
     holeCount: 3,
-    spacingInches: 3,
+    spacingInches: 8,
+    iconPath: "assets/widespread_faucet.svg",
   },
 ];
 
-function renderFaucetHoleIcon(id: FaucetHoleOption) {
-  if (id === "none") {
+function renderFaucetHoleIcon(option: FaucetHoleConfig) {
+  if (option.iconPath) {
     return (
-      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
-        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.6" strokeDasharray="2.5 2.5" opacity="0.4" />
-        <circle cx="24" cy="12" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2" opacity="0.6" />
-        <line x1="19" y1="17" x2="29" y2="7" stroke="currentColor" strokeWidth="1.6" opacity="0.75" />
-      </svg>
-    );
-  }
-  if (id === "single") {
-    return (
-      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
-        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.5 2.5" opacity="0.25" />
-        <circle cx="24" cy="12" r="5" fill="currentColor" />
-        <circle cx="24" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="1.5 1.5" opacity="0.35" />
-      </svg>
-    );
-  }
-  if (id === "3_hole_2in") {
-    return (
-      <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
-        <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2.5 2.5" opacity="0.2" />
-        <circle cx="15" cy="12" r="3.5" fill="currentColor" />
-        <circle cx="24" cy="12" r="4.5" fill="currentColor" />
-        <circle cx="33" cy="12" r="3.5" fill="currentColor" />
-        <path d="M 15 18 L 15 20 L 33 20 L 33 18" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.5" />
-        <text x="24" y="23.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="700" opacity="0.75">2″</text>
-      </svg>
+      <img
+        src={assetUrl(option.iconPath)}
+        alt={option.label}
+        className="reusable-card-image"
+      />
     );
   }
   return (
-    <svg viewBox="0 0 48 24" className="faucet-icon-svg" aria-hidden="true">
-      <line x1="6" y1="12" x2="42" y2="12" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2.5 2.5" opacity="0.2" />
-      <circle cx="9" cy="12" r="3.5" fill="currentColor" />
-      <circle cx="24" cy="12" r="4.5" fill="currentColor" />
-      <circle cx="39" cy="12" r="3.5" fill="currentColor" />
-      <path d="M 9 18 L 9 20 L 39 20 L 39 18" fill="none" stroke="currentColor" strokeWidth="0.9" opacity="0.5" />
-      <text x="24" y="23.5" textAnchor="middle" fontSize="6" fill="currentColor" fontWeight="700" opacity="0.75">3″</text>
+    <svg viewBox="0 0 80 80" className="reusable-card-image" aria-hidden="true" style={{ padding: "4px" }}>
+      <rect x="14" y="52" width="52" height="7" rx="2" fill="#F4F1EC" stroke="#1A1A1A" strokeWidth="1.2" />
+      <circle cx="40" cy="34" r="13" fill="none" stroke="#1A1A1A" strokeWidth="1.8" strokeDasharray="3.5 3.5" opacity="0.45" />
+      <line x1="31" y1="43" x2="49" y2="25" stroke="#1A1A1A" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -964,10 +949,10 @@ function App() {
   const faucetHoleSummary = selectedFaucetHoles === "none"
     ? "None (0 holes)"
     : (selectedFaucetHoles === "single"
-      ? "Center (single)"
-      : (selectedFaucetHoles === "3_hole_2in"
-        ? "3 holes (2 in apart)"
-        : "3 holes (3 in apart)"));
+      ? "Single hole"
+      : (selectedFaucetHoles === "4_inch_centerset" || selectedFaucetHoles === "centerset" || selectedFaucetHoles === "3_hole_2in"
+        ? "4 inches centerset"
+        : "Widespread"));
 
   const rearDeckMm = Number(dims.D2 ?? 100);
   const leftDeckMm = Number(dims.L2 ?? 131);
@@ -989,7 +974,9 @@ function App() {
   const rightToFaucetCenterMm = rightDeckMm + (currentBowlLengthMm / 2);
   const rightToFaucetCenterIn = (rightToFaucetCenterMm / 25.4).toFixed(2);
 
-  const spacingInchesVal = selectedFaucetHoles === "3_hole_2in" ? 2 : (selectedFaucetHoles === "3_hole_3in" ? 3 : 0);
+  const spacingInchesVal = (selectedFaucetHoles === "4_inch_centerset" || selectedFaucetHoles === "centerset" || selectedFaucetHoles === "3_hole_2in")
+    ? 4
+    : (selectedFaucetHoles === "widespread" || selectedFaucetHoles === "3_hole_3in" ? 8 : 0);
 
   const handleAddToCart = () => {
     if (isCartDisabled || cartStatus === "loading") return;
@@ -1032,11 +1019,12 @@ function App() {
           label: selectedFaucetHoles === "none"
             ? "None (0 holes)"
             : (selectedFaucetHoles === "single"
-              ? "Center (single)"
-              : (selectedFaucetHoles === "3_hole_2in" ? "3 holes apart 2 inches" : "3 holes apart 3 inches")),
+              ? "Single hole"
+              : (selectedFaucetHoles === "4_inch_centerset" || selectedFaucetHoles === "centerset" || selectedFaucetHoles === "3_hole_2in"
+                ? "4 inches centerset"
+                : "Widespread")),
           holeCount: selectedFaucetHoles === "none" ? 0 : (selectedFaucetHoles === "single" ? 1 : 3),
-          ...(selectedFaucetHoles === "3_hole_2in" ? { spacingInches: 2 } : {}),
-          ...(selectedFaucetHoles === "3_hole_3in" ? { spacingInches: 3 } : {}),
+          ...(spacingInchesVal > 0 ? { spacingInches: spacingInchesVal } : {}),
           measurementsInches: selectedFaucetHoles !== "none" ? {
             rearEdgeToCenter: Number(topToFaucetCenterIn),
             basinToCenter: Number(faucetCenterToBasinIn),
@@ -1091,8 +1079,10 @@ function App() {
     const faucetHolesText = selectedFaucetHoles === "none"
       ? "No faucet holes"
       : (selectedFaucetHoles === "single"
-        ? "Center hole"
-        : (selectedFaucetHoles === "3_hole_2in" ? "3 holes (2″ apart)" : "3 holes (3″ apart)"));
+        ? "Single hole"
+        : (selectedFaucetHoles === "4_inch_centerset" || selectedFaucetHoles === "centerset" || selectedFaucetHoles === "3_hole_2in"
+          ? "4 inches centerset (4″ apart)"
+          : "Widespread (8″ apart)"));
     const drainEdgeText = selectedBowlType === "tilt"
       ? `${selectedDrainEdge.charAt(0).toUpperCase() + selectedDrainEdge.slice(1)} drain`
       : "Center drain";
@@ -1471,20 +1461,20 @@ function App() {
             <span>Deck Drilling Configuration</span>
             {/* <strong style={{ color: "#a38460" }}>Included</strong> */}
           </div>
-          <div className="faucet-holes-card-grid">
+          <div className="bowl-model-card-grid faucet-holes-card-grid">
             {faucetHoleOptions.map((option) => (
               <button
-                className={`faucet-hole-card ${selectedFaucetHoles === option.id ? "selected" : ""}`}
+                className={`reusable-card ${selectedFaucetHoles === option.id ? "selected" : ""}`}
                 key={option.id}
                 onClick={() => updateFaucetHoles(option.id)}
                 type="button"
               >
-                <div className="faucet-hole-diagram" aria-hidden="true">
-                  {renderFaucetHoleIcon(option.id)}
+                <div className="reusable-card-image-wrapper">
+                  {renderFaucetHoleIcon(option)}
                 </div>
-                <div className="faucet-hole-card-text">
-                  <span className="faucet-hole-card-title">{option.label}</span>
-                  <span className="faucet-hole-card-desc">{option.sublabel}</span>
+                <div className="reusable-card-content">
+                  <div className="reusable-card-label">{option.label}</div>
+                  <div className="reusable-card-subtitle">{option.sublabel}</div>
                 </div>
               </button>
             ))}
@@ -1867,9 +1857,9 @@ function App() {
                   <div className="spec-value">
                     <strong className="spec-val-primary">
                       {selectedFaucetHoles === "none" && "None (0 holes)"}
-                      {selectedFaucetHoles === "single" && "Center (single)"}
-                      {selectedFaucetHoles === "3_hole_2in" && "3 holes (2″ spacing)"}
-                      {selectedFaucetHoles === "3_hole_3in" && "3 holes (3″ spacing)"}
+                      {selectedFaucetHoles === "single" && "Single hole"}
+                      {(selectedFaucetHoles === "4_inch_centerset" || selectedFaucetHoles === "centerset" || selectedFaucetHoles === "3_hole_2in") && "4 inches centerset"}
+                      {(selectedFaucetHoles === "widespread" || selectedFaucetHoles === "3_hole_3in") && "Widespread"}
                     </strong>
                     <span className="spec-val-secondary">
                       {selectedFaucetHoles === "none"

@@ -4,7 +4,15 @@ export type BowlQuantity = "single" | "double" | "triple";
 
 export type MountingType = "wall_mounted" | "countertop" | "undermount";
 
-export type FaucetHoleOption = "none" | "single" | "3_hole_2in" | "3_hole_3in";
+export type FaucetHoleOption =
+  | "none"
+  | "single"
+  | "4_inch_centerset"
+  | "centerset"
+  | "widespread"
+  | "3_hole_2in"
+  | "3_hole_3in";
+
 
 export interface BowlOption {
   id: string;

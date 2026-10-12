@@ -581,7 +581,9 @@ function Measurements({ show, config }: MeasurementsProps) {
   const leftToFirstCenterIn = ((leftInset + singleBowlLengthMm / 2) / 25.4).toFixed(2);
   const rightToLastCenterIn = ((rightInset + singleBowlLengthMm / 2) / 25.4).toFixed(2);
 
-  const spacingInches = faucetHolesType === "3_hole_2in" ? 2 : (faucetHolesType === "3_hole_3in" ? 3 : 0);
+  const spacingInches = (faucetHolesType === "4_inch_centerset" || faucetHolesType === "centerset" || faucetHolesType === "3_hole_2in")
+    ? 4
+    : (faucetHolesType === "widespread" || faucetHolesType === "3_hole_3in" ? 8 : 0);
   const spacingMm = spacingInches * 25.4;
 
   const faucetDeckZ = -sceneDepth / 2 + sceneRearInset / 2;
@@ -792,21 +794,21 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
   const faucetHoles = useMemo(() => {
     if (faucetHoleType === "none") return [];
 
-    const spacing2Inches = toScene(2 * 25.4);
-    const spacing3Inches = toScene(3 * 25.4);
+    const spacingCenterset = toScene(4 * 25.4);
+    const spacingWidespread = toScene(8 * 25.4);
     const holes: Array<{ x: number; z: number }> = [];
 
     bowls.forEach((bowl) => {
       if (faucetHoleType === "single") {
         holes.push({ x: bowl.x, z: faucetDeckZ });
-      } else if (faucetHoleType === "3_hole_2in") {
-        holes.push({ x: bowl.x - spacing2Inches, z: faucetDeckZ });
+      } else if (faucetHoleType === "4_inch_centerset" || faucetHoleType === "centerset" || faucetHoleType === "3_hole_2in") {
+        holes.push({ x: bowl.x - spacingCenterset, z: faucetDeckZ });
         holes.push({ x: bowl.x, z: faucetDeckZ });
-        holes.push({ x: bowl.x + spacing2Inches, z: faucetDeckZ });
-      } else if (faucetHoleType === "3_hole_3in") {
-        holes.push({ x: bowl.x - spacing3Inches, z: faucetDeckZ });
+        holes.push({ x: bowl.x + spacingCenterset, z: faucetDeckZ });
+      } else if (faucetHoleType === "widespread" || faucetHoleType === "3_hole_3in") {
+        holes.push({ x: bowl.x - spacingWidespread, z: faucetDeckZ });
         holes.push({ x: bowl.x, z: faucetDeckZ });
-        holes.push({ x: bowl.x + spacing3Inches, z: faucetDeckZ });
+        holes.push({ x: bowl.x + spacingWidespread, z: faucetDeckZ });
       }
     });
 

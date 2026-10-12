@@ -1,0 +1,46 @@
+<svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="path-1-inside-1_813_5344" fill="white">
+<rect x="35.0757" y="50.6074" width="9.09091" height="16.6667" rx="0.757576"/>
+</mask>
+<rect x="35.0757" y="50.6074" width="9.09091" height="16.6667" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-1-inside-1_813_5344)"/>
+<mask id="path-2-inside-2_813_5344" fill="white">
+<rect x="9.31836" y="58.1836" width="9.09091" height="9.09091" rx="0.757576"/>
+</mask>
+<rect x="9.31836" y="58.1836" width="9.09091" height="9.09091" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-2-inside-2_813_5344)"/>
+<mask id="path-3-inside-3_813_5344" fill="white">
+<rect x="10.833" y="54.3965" width="6.06061" height="4.54545" rx="0.757576"/>
+</mask>
+<rect x="10.833" y="54.3965" width="6.06061" height="4.54545" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-3-inside-3_813_5344)"/>
+<mask id="path-4-inside-4_813_5344" fill="white">
+<rect x="2.5" y="55.1523" width="9.09091" height="2.27273" rx="0.757576"/>
+</mask>
+<rect x="2.5" y="55.1523" width="9.09091" height="2.27273" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-4-inside-4_813_5344)"/>
+<mask id="path-5-inside-5_813_5344" fill="white">
+<rect x="68.4092" y="55.1523" width="9.09091" height="2.27273" rx="0.757576"/>
+</mask>
+<rect x="68.4092" y="55.1523" width="9.09091" height="2.27273" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-5-inside-5_813_5344)"/>
+<mask id="path-6-inside-6_813_5344" fill="white">
+<rect x="63.106" y="54.3965" width="6.06061" height="4.54545" rx="0.757576"/>
+</mask>
+<rect x="63.106" y="54.3965" width="6.06061" height="4.54545" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-6-inside-6_813_5344)"/>
+<mask id="path-7-inside-7_813_5344" fill="white">
+<rect x="61.5908" y="58.1836" width="9.09091" height="9.09091" rx="0.757576"/>
+</mask>
+<rect x="61.5908" y="58.1836" width="9.09091" height="9.09091" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-7-inside-7_813_5344)"/>
+<path d="M35.6973 66.9004H43.5459C43.7234 66.9004 43.8763 67.0261 43.9111 67.2002L44.4551 69.9189H34.7881L35.332 67.2002C35.3669 67.0261 35.5197 66.9004 35.6973 66.9004Z" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="0.77"/>
+<path d="M9.93945 66.9004H17.7881C17.9656 66.9004 18.1185 67.0261 18.1533 67.2002L18.6973 69.9189H9.03027L9.57422 67.2002C9.60905 67.0261 9.76186 66.9004 9.93945 66.9004Z" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="0.77"/>
+<path d="M62.2119 66.9004H70.0605C70.2381 66.9004 70.391 67.0261 70.4258 67.2002L70.9697 69.9189H61.3027L61.8467 67.2002C61.8815 67.0261 62.0343 66.9004 62.2119 66.9004Z" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="0.77"/>
+<mask id="path-11-inside-8_813_5344" fill="white">
+<rect x="34.3184" y="69.5469" width="10.6061" height="4.54545" rx="0.757576"/>
+</mask>
+<rect x="34.3184" y="69.5469" width="10.6061" height="4.54545" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-11-inside-8_813_5344)"/>
+<mask id="path-12-inside-9_813_5344" fill="white">
+<rect x="8.56055" y="69.5469" width="10.6061" height="4.54545" rx="0.757576"/>
+</mask>
+<rect x="8.56055" y="69.5469" width="10.6061" height="4.54545" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-12-inside-9_813_5344)"/>
+<mask id="path-13-inside-10_813_5344" fill="white">
+<rect x="60.833" y="69.5469" width="10.6061" height="4.54545" rx="0.757576"/>
+</mask>
+<rect x="60.833" y="69.5469" width="10.6061" height="4.54545" rx="0.757576" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="1.54" mask="url(#path-13-inside-10_813_5344)"/>
+<path d="M26.7422 5.52539C35.3379 5.52539 42.2792 12.7913 42.2793 21.7197V50.9922H37.3418V21.7197C37.3417 18.0632 36.3941 15.0616 34.6152 12.9805C32.8434 10.9076 30.2105 9.7041 26.7422 9.7041C23.2727 9.70414 20.5413 10.9087 18.6738 12.9873C16.8019 15.071 15.7637 18.0719 15.7637 21.7197V22.5771C15.7635 23.208 15.252 23.7197 14.6211 23.7197H12.3486C11.7177 23.7197 11.2062 23.208 11.2061 22.5771V21.7197C11.2062 12.7913 18.1465 5.52547 26.7422 5.52539Z" fill="#F4F1EC" stroke="#1A1A1A" stroke-width="0.77"/>
+</svg>

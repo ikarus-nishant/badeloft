@@ -2258,95 +2258,28 @@ svg text {
 /* Faucet Holes Cards Styling */
 .faucet-holes-card-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  margin-top: 4px;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
 }
 
-.faucet-hole-card {
-  background: #fbfaf8;
-  border: 1.5px solid #e5e3df;
-  border-radius: 6px;
-  padding: 12px 14px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.faucet-holes-card-grid button.reusable-card {
   width: 100%;
-  transition: all 0.2s ease;
-  cursor: pointer;
-  outline: none;
+  height: 100%;
+}
+
+.faucet-holes-card-grid .reusable-card-image-wrapper {
+  padding: 8px 14px;
   box-sizing: border-box;
 }
 
-.faucet-hole-card:hover {
-  background: #fefdfb;
-  border-color: #d1cfcb;
+.faucet-holes-card-grid .reusable-card-image {
+  width: 100%;
+  height: 100%;
+  max-height: 64px;
+  object-fit: contain;
 }
 
-.faucet-hole-card.selected {
-  background: #ffffff;
-  border-color: #1c1c1c;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.faucet-hole-diagram {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  height: 28px;
-  color: #8c8f96;
-  transition: color 0.2s ease;
-}
-
-.faucet-hole-card.selected .faucet-hole-diagram {
-  color: #1c1c1c;
-}
-
-.faucet-icon-svg {
-  width: 52px;
-  height: 26px;
-  display: block;
-}
-
-.faucet-hole-card-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.faucet-hole-card-title {
-  font-size: 13.5px;
-  font-weight: 550;
-  color: #555761;
-  margin: 0;
-  line-height: 1.25;
-}
-
-.faucet-hole-card.selected .faucet-hole-card-title {
-  color: #1a1a1a;
-  font-weight: 600;
-}
-
-.faucet-hole-card-desc {
-  font-size: 11.5px;
-  line-height: 1.35;
-  color: #8c8f96;
-  margin: 0;
-  font-weight: 400;
-}
-
-.faucet-hole-card.selected .faucet-hole-card-desc {
-  color: #63656d;
-}
-
-.faucet-hole-hint {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #737783;
-  font-weight: 450;
-  line-height: 1.4;
-}
 
 /* Faucet Drilling & Placement Technical Measurements Panel */
 .faucet-measurements-panel {
@@ -3487,28 +3420,31 @@ svg text {
     text-overflow: clip;
   }
 
-  /* Faucet Holes Cards: Full-Width Rows (56–64px) */
+  /* Faucet Holes Cards: Full-Width Rows */
   .faucet-holes-card-grid {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 10px;
     margin-top: 8px;
   }
 
   .faucet-hole-card {
-    min-height: 56px;
+    min-height: 60px;
     height: auto;
-    padding: 10px 14px;
-    flex-direction: row;
-    align-items: center;
-    gap: 14px;
+    padding: 12px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
     box-sizing: border-box;
   }
 
-  .faucet-hole-diagram {
-    flex-shrink: 0;
-    width: 48px;
-    justify-content: center;
+  .faucet-hole-svg-wrap {
+    height: 40px;
   }
+
+  .faucet-thumb-svg {
+    height: 36px;
+  }
+
 
   .faucet-measurements-panel {
     padding: 11px;
@@ -3528,15 +3464,17 @@ svg text {
     font-size: 12.5px;
   }
 
-  /* Bowl Model Cards: Full-Width Rows (56–64px) */
-  .bowl-model-card-grid {
+  /* Bowl Model & Faucet Holes Cards: Full-Width Rows (56–64px) */
+  .bowl-model-card-grid,
+  .faucet-holes-card-grid {
     grid-template-columns: 1fr;
     gap: 8px;
     margin-top: 8px;
   }
 
   .bowl-model-card-grid button.reusable-card,
-  .bowl-model-card-grid .tooltip-wrapper button.reusable-card {
+  .bowl-model-card-grid .tooltip-wrapper button.reusable-card,
+  .faucet-holes-card-grid button.reusable-card {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -3549,7 +3487,8 @@ svg text {
     box-sizing: border-box;
   }
 
-  .bowl-model-card-grid .reusable-card-image-wrapper {
+  .bowl-model-card-grid .reusable-card-image-wrapper,
+  .faucet-holes-card-grid .reusable-card-image-wrapper {
     width: 44px;
     height: 44px;
     min-width: 44px;
@@ -3558,7 +3497,8 @@ svg text {
     border-radius: 4px;
   }
 
-  .bowl-model-card-grid .reusable-card-content {
+  .bowl-model-card-grid .reusable-card-content,
+  .faucet-holes-card-grid .reusable-card-content {
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -3567,7 +3507,8 @@ svg text {
     text-align: left;
   }
 
-  .bowl-model-card-grid .reusable-card-label {
+  .bowl-model-card-grid .reusable-card-label,
+  .faucet-holes-card-grid .reusable-card-label {
     font-size: 15px;
     font-weight: 700;
     margin: 0;
@@ -3575,7 +3516,8 @@ svg text {
     text-align: left;
   }
 
-  .bowl-model-card-grid .reusable-card-subtitle {
+  .bowl-model-card-grid .reusable-card-subtitle,
+  .faucet-holes-card-grid .reusable-card-subtitle {
     font-size: 11.5px;
     margin: 2px 0 0 0;
     line-height: 1.25;
