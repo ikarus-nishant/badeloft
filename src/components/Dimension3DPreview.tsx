@@ -122,7 +122,7 @@ type ModelPart = "connector" | "drain_cap" | "sink";
 
 function modelPartFromName(name: string): ModelPart | undefined {
   const normalizedName = name.trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/\.\d+$/, "");
-  if (normalizedName.startsWith("connector")) return "connector";
+  if (normalizedName.startsWith("connector") || normalizedName.startsWith("border")) return "connector";
   if (normalizedName.startsWith("drain_cap") || normalizedName.startsWith("draincap")) return "drain_cap";
   if (normalizedName.startsWith("sink") || normalizedName.startsWith("basin")) return "sink";
   return undefined;
@@ -224,6 +224,10 @@ const bowlModelUrls: Record<string, string> = {
   "UB-05-M": resolveModelUrl("UB-05-M.glb"),
   "UB-05-L": resolveModelUrl("UB-05-L.glb"),
   "UB-05-XL": resolveModelUrl("UB-05-XL.glb"),
+  "SR-14": resolveModelUrl("SR-14.glb"),
+  "SR-15": resolveModelUrl("SR-15.glb"),
+  "SR-18": resolveModelUrl("SR-18.glb"),
+  "SR-19": resolveModelUrl("SR-19.glb"),
 };
 
 function cutGeometryWithBowls(
@@ -587,33 +591,48 @@ function Measurements({ show, config }: MeasurementsProps) {
   const firstBowl = bowls[0];
   const lastBowl = bowls[bowls.length - 1];
 
-  // First bowl inner measurements
-  const firstBowlSceneLength = singleBowlSceneLength;
-  const firstBowlSceneDepth = singleBowlSceneDepth;
-  const wallInsetX = Math.max(0.035, firstBowlSceneLength * 0.065);
-  const wallInsetZ = Math.max(0.035, firstBowlSceneDepth * 0.065);
-  const firstLineStartX = firstBowl.startX + wallInsetX;
-  const firstLineEndX = firstBowl.endX - wallInsetX;
-  const firstInnerRearZ = firstBowl.startZ + wallInsetZ + 0.015;
-  const firstInnerLeftX = firstBowl.startX + wallInsetX + 0.015;
-  const cornerSpace = 0.035;
-  const firstLineStartZ = firstInnerRearZ + cornerSpace;
-  const firstLineEndZ = firstBowl.endZ - wallInsetZ;
+  // For the four new bowls (SR-14, SR-15, SR-18, SR-19), the outer collar/border extends 20mm beyond the inner basin cavity.
+  // Calculate their interior dimensions from the inside basin walls rather than the outer border.
+  const isNewBowl = config.bowl?.id === "SR-14" || config.bowl?.id === "SR-15" || config.bowl?.id === "SR-18" || config.bowl?.id === "SR-19";
+  const bowlRimX = isNewBowl ? toScene(20) : 0;
+  const bowlRimZ = isNewBowl ? toScene(20) : 0;
+
+  const innerStartX = firstBowl.startX + bowlRimX;
+  const innerEndX = firstBowl.endX - bowlRimX;
+  const innerStartZ = firstBowl.startZ + bowlRimZ;
+  const innerEndZ = firstBowl.endZ - bowlRimZ;
+
+  // First bowl inner measurements - placed inside the basin, offset away from walls/rims with clean clearance so lines do not join
+  const clearanceX = isNewBowl ? 0.012 : Math.min(0.04, Math.max(0.02, singleBowlSceneLength * 0.012));
+  const clearanceZ = isNewBowl ? 0.012 : Math.min(0.04, Math.max(0.02, singleBowlSceneDepth * 0.015));
+
+  const firstLineStartX = innerStartX + clearanceX;
+  const firstLineEndX = innerEndX - clearanceX;
+  const lineOffsetFromRearZ = Math.min(0.24, Math.max(0.16, singleBowlSceneDepth * 0.12));
+  const lineOffsetFromLeftX = Math.min(0.26, Math.max(0.18, singleBowlSceneLength * 0.10));
+  const firstInnerRearZ = innerStartZ + lineOffsetFromRearZ;
+  const firstInnerLeftX = innerStartX + lineOffsetFromLeftX;
+  const firstLineStartZ = innerStartZ + clearanceZ;
+  const firstLineEndZ = innerEndZ - clearanceZ;
   const tickSize = Math.min(0.018, singleBowlSceneDepth * 0.025);
 
-  const isOval = config.bowl?.id === "UB-02" || config.bowl?.id === "UB-03" || config.bowl?.name?.toLowerCase().includes("oval") || false;
-  const ovalInsetX = Math.max(0.035, firstBowlSceneLength * 0.045);
-  const ovalInsetZ = Math.max(0.035, firstBowlSceneDepth * 0.055);
+  const isOval = config.bowl?.id === "UB-02" || config.bowl?.id === "UB-03" || config.bowl?.id === "SR-14" || config.bowl?.id === "SR-18" || config.bowl?.name?.toLowerCase().includes("oval") || false;
 
   // Positions for rear inset, front inset, top to center, bottom to center, faucet deck
-  const rearInsetLineX = firstBowl.startX + Math.min(0.12, singleBowlSceneLength * 0.25);
-  const frontInsetLineX = lastBowl.endX - Math.min(0.08, singleBowlSceneLength * 0.15);
-  const topToCenterLineX = lastBowl.startX + Math.min(0.12, singleBowlSceneLength * 0.2);
-  const bottomToCenterLineX = lastBowl.centerX + Math.min(0.16, singleBowlSceneLength * 0.25);
+  const rearInsetLineX = firstBowl.startX + Math.min(0.08, singleBowlSceneLength * 0.08);
+  const frontInsetLineX = lastBowl.endX - Math.min(0.10, singleBowlSceneLength * 0.12);
+  const topToCenterLineX = lastBowl.endX - Math.min(0.26, singleBowlSceneLength * 0.22);
+  const bottomToCenterLineX = lastBowl.centerX + Math.min(0.14, singleBowlSceneLength * 0.18);
 
   const faucetOffset = Math.min(0.06, singleBowlSceneLength * 0.08);
   const faucetToTopLineX = lastBowl.centerX - faucetOffset;
   const basinToFaucetLineX = lastBowl.centerX + faucetOffset;
+  const faucetLineOffsetFromTop = Math.min(0.12, Math.max(0.06, sceneHeight * 0.15));
+  const faucetLineY = topY - faucetLineOffsetFromTop;
+  const faucetLineZ = topEdgeZ - 0.012;
+  const faucetLabelY = faucetLineY;
+  const faucetLabelZ = faucetLineZ - 0.02;
+  const faucetTickSize = Math.max(0.022, tickSize * 1.2);
 
   return (
     <group>
@@ -632,9 +651,9 @@ function Measurements({ show, config }: MeasurementsProps) {
         <group>
           {/* Oval Width (Major Axis) across center */}
           <group>
-            <Line start={[firstBowl.startX + ovalInsetX, rimLineY, firstBowl.centerZ]} end={[firstBowl.endX - ovalInsetX, rimLineY, firstBowl.centerZ]} color={color} />
-            <Line start={[firstBowl.startX + ovalInsetX, rimLineY, firstBowl.centerZ - tickSize]} end={[firstBowl.startX + ovalInsetX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-            <Line start={[firstBowl.endX - ovalInsetX, rimLineY, firstBowl.centerZ - tickSize]} end={[firstBowl.endX - ovalInsetX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
+            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ]} color={color} />
+            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
+            <Line start={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
             <Html position={[firstBowl.centerX, rimLabelY, firstBowl.centerZ]} center>
               <div className="measurement-label">{singleBowlLengthInches} in</div>
             </Html>
@@ -642,10 +661,10 @@ function Measurements({ show, config }: MeasurementsProps) {
 
           {/* Oval Depth (Minor Axis) across center */}
           <group>
-            <Line start={[firstBowl.centerX, rimLineY, firstBowl.startZ + ovalInsetZ]} end={[firstBowl.centerX, rimLineY, firstBowl.endZ - ovalInsetZ]} color={color} />
-            <Line start={[firstBowl.centerX - tickSize, rimLineY, firstBowl.startZ + ovalInsetZ]} end={[firstBowl.centerX + tickSize, rimLineY, firstBowl.startZ + ovalInsetZ]} color={color} />
-            <Line start={[firstBowl.centerX - tickSize, rimLineY, firstBowl.endZ - ovalInsetZ]} end={[firstBowl.centerX + tickSize, rimLineY, firstBowl.endZ - ovalInsetZ]} color={color} />
-            <Html position={[firstBowl.centerX, rimLabelY, firstBowl.centerZ - 0.05]} center>
+            <Line start={[firstBowl.centerX, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX, rimLineY, innerEndZ - clearanceZ]} color={color} />
+            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerStartZ + clearanceZ]} color={color} />
+            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerEndZ - clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerEndZ - clearanceZ]} color={color} />
+            <Html position={[firstBowl.centerX, rimLabelY, firstBowl.centerZ - (isNewBowl ? toScene(50) : 0.05)]} center>
               <div className="measurement-label">{singleBowlDepthInches} in</div>
             </Html>
           </group>
@@ -764,22 +783,22 @@ function Measurements({ show, config }: MeasurementsProps) {
             </Html>
           </group>
 
-          {/* Left Edge to First Faucet Center */}
+          {/* Left Edge to First Faucet Center - placed along the outer vertical face where red line is */}
           <group>
-            <Line start={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035]} end={[firstBowl.centerX, rimLineY, topEdgeZ + 0.035]} color={color} />
-            <Line start={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[-sceneLength / 2, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
-            <Line start={[firstBowl.centerX, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[firstBowl.centerX, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
-            <Html position={[(-sceneLength / 2 + firstBowl.centerX) / 2, rimLabelY, topEdgeZ + 0.035]} center>
+            <Line start={[-sceneLength / 2, faucetLineY, faucetLineZ]} end={[firstBowl.centerX, faucetLineY, faucetLineZ]} color={color} />
+            <Line start={[-sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[-sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
+            <Line start={[firstBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[firstBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
+            <Html position={[(-sceneLength / 2 + firstBowl.centerX) / 2, faucetLabelY, faucetLabelZ]} center>
               <div className="measurement-label">Left to Faucet: {leftToFirstCenterIn} in</div>
             </Html>
           </group>
 
-          {/* Right Edge to Last Faucet Center */}
+          {/* Right Edge to Last Faucet Center - placed along the outer vertical face where red line is */}
           <group>
-            <Line start={[lastBowl.centerX, rimLineY, topEdgeZ + 0.035]} end={[sceneLength / 2, rimLineY, topEdgeZ + 0.035]} color={color} />
-            <Line start={[lastBowl.centerX, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[lastBowl.centerX, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
-            <Line start={[sceneLength / 2, rimLineY, topEdgeZ + 0.035 - tickSize]} end={[sceneLength / 2, rimLineY, topEdgeZ + 0.035 + tickSize]} color={color} />
-            <Html position={[(lastBowl.centerX + sceneLength / 2) / 2, rimLabelY, topEdgeZ + 0.035]} center>
+            <Line start={[lastBowl.centerX, faucetLineY, faucetLineZ]} end={[sceneLength / 2, faucetLineY, faucetLineZ]} color={color} />
+            <Line start={[lastBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[lastBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
+            <Line start={[sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
+            <Html position={[(lastBowl.centerX + sceneLength / 2) / 2, faucetLabelY, faucetLabelZ]} center>
               <div className="measurement-label">Right to Faucet: {rightToLastCenterIn} in</div>
             </Html>
           </group>

@@ -190,6 +190,10 @@ const bowlDetails: Record<string, { shape: BowlShape; size: BowlSize; displayNam
   "UB-05-M": { shape: "rectangle", size: "M", displayName: "05-M" },
   "UB-05-L": { shape: "rectangle", size: "L", displayName: "05-L" },
   "UB-05-XL": { shape: "rectangle", size: "XL", displayName: "05-XL" },
+  "SR-14": { shape: "oval", size: "S", displayName: "SR-14" },
+  "SR-15": { shape: "rectangle", size: "S", displayName: "SR-15" },
+  "SR-18": { shape: "oval", size: "S", displayName: "SR-18" },
+  "SR-19": { shape: "rectangle", size: "S", displayName: "SR-19" },
 };
 
 function getShapeAndSizeFromBowlId(bowlId: string): { shape: BowlShape; size: BowlSize } {

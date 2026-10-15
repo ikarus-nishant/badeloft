@@ -16,4 +16,8 @@ export const bowlOptions: BowlOption[] = [
   { id: "UB-05-M", name: "UB-05-M", image: assetUrl("bowls/UB-05-M.png"), size: { length: 600, depth: 415, height: 155 }, innerSize: { length: 550, depth: 360 }, basePrice: 340, colorPrice: 100 },
   { id: "UB-05-L", name: "UB-05-L", image: assetUrl("bowls/UB-05-L.png"), size: { length: 800, depth: 425, height: 180 }, innerSize: { length: 740, depth: 365 }, basePrice: 390, colorPrice: 130 },
   { id: "UB-05-XL", name: "UB-05-XL", image: assetUrl("bowls/UB-05-XL.png"), size: { length: 1000, depth: 425, height: 180 }, innerSize: { length: 940, depth: 365 }, basePrice: 490, colorPrice: 100 },
+  { id: "SR-14", name: "SR-14", image: assetUrl("bowls/SR-14.png"), size: { length: 530, depth: 320, height: 168 }, innerSize: { length: 490, depth: 280 }, basePrice: 340, colorPrice: 100 },
+  { id: "SR-15", name: "SR-15", image: assetUrl("bowls/SR-15.png"), size: { length: 460, depth: 320, height: 168 }, innerSize: { length: 420, depth: 280 }, basePrice: 340, colorPrice: 100 },
+  { id: "SR-18", name: "SR-18", image: assetUrl("bowls/SR-18.png"), size: { length: 520, depth: 360, height: 168 }, innerSize: { length: 480, depth: 320 }, basePrice: 340, colorPrice: 100 },
+  { id: "SR-19", name: "SR-19", image: assetUrl("bowls/SR-19.png"), size: { length: 520, depth: 360, height: 168 }, innerSize: { length: 480, depth: 320 }, basePrice: 340, colorPrice: 100 },
 ];
