@@ -2795,6 +2795,95 @@ svg text {
   user-select: none;
 }
 
+/* Dimension Legend on 3D Canvas */
+.dimension-legend {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 6;
+  box-shadow: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dimension-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1;
+}
+
+.dimension-legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dimension-legend-color.overall {
+  background-color: #df2727;
+}
+
+.dimension-legend-color.sink {
+  background-color: #0055ff;
+}
+
+.dimension-legend-color.faucets {
+  background-color: #00d664;
+}
+
+@media (max-width: 1023px) {
+  .dimension-legend {
+    position: absolute !important;
+    bottom: calc(var(--sheet-peek-height, 126px) + 12px) !important;
+    left: 14px !important;
+    padding: 0 !important;
+    gap: 3px !important;
+    z-index: 25 !important;
+    transition: bottom 0.38s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease !important;
+  }
+
+  .stage.snap-peek .dimension-legend {
+    bottom: calc(var(--sheet-peek-height, 126px) + 12px) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .stage.snap-half .dimension-legend {
+    bottom: 12px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .stage.snap-full .dimension-legend {
+    bottom: 12px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .dimension-legend-item {
+    font-size: 10px !important;
+    gap: 5px !important;
+  }
+
+  .dimension-legend-color {
+    width: 9px !important;
+    height: 9px !important;
+    border-radius: 2px !important;
+  }
+}
+
 /* ==========================================================================
    Numbered Step Accordion Component (Phase 2 - Part 2)
    ========================================================================== */

@@ -3,7 +3,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { EffectComposer, SSAO } from "@react-three/postprocessing";
 import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { Box3, BoxGeometry, BufferGeometry, CylinderGeometry, DirectionalLight, Group, Line as ThreeLine, LineBasicMaterial, MathUtils, Mesh, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, CylinderGeometry, DirectionalLight, Group, Line as ThreeLine, LineBasicMaterial, LineSegments, MathUtils, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, type Object3D, PerspectiveCamera, Quaternion, Vector3 } from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Brush, Evaluator, SUBTRACTION } from "three-bvh-csg";
 import type { SinkConfiguration } from "../types/configurator";
@@ -63,6 +63,7 @@ interface BasinModelProps extends SinkAppearance {
   depth: number;
   sinkHeight: number;
   modelUrl?: string;
+  showDimensions?: boolean;
 }
 
 interface BowlPlacement {
@@ -118,10 +119,29 @@ function toScene(value: number) {
   return value / unit;
 }
 
-type ModelPart = "connector" | "drain_cap" | "sink";
+type ModelPart = "connector" | "drain_cap" | "sink" | "dimension";
+
+function isDimensionObject(object: Object3D): boolean {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.name && current.name.toLowerCase().includes("dimension")) return true;
+    if (current.userData && typeof current.userData === "object") {
+      if (current.userData.name && String(current.userData.name).toLowerCase().includes("dimension")) return true;
+    }
+    current = current.parent;
+  }
+  if (object instanceof Mesh) {
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) {
+      if (material?.name && material.name.toLowerCase().includes("dimension")) return true;
+    }
+  }
+  return false;
+}
 
 function modelPartFromName(name: string): ModelPart | undefined {
   const normalizedName = name.trim().toLowerCase().replace(/[\s-]+/g, "_").replace(/\.\d+$/, "");
+  if (normalizedName.startsWith("dimension") || normalizedName.includes("dimension")) return "dimension";
   if (normalizedName.startsWith("connector") || normalizedName.startsWith("border")) return "connector";
   if (normalizedName.startsWith("drain_cap") || normalizedName.startsWith("draincap")) return "drain_cap";
   if (normalizedName.startsWith("sink") || normalizedName.startsWith("basin")) return "sink";
@@ -129,6 +149,8 @@ function modelPartFromName(name: string): ModelPart | undefined {
 }
 
 function findModelPart(object: Object3D): ModelPart | undefined {
+  if (isDimensionObject(object)) return "dimension";
+
   if (object instanceof Mesh) {
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) {
@@ -253,16 +275,88 @@ function cutGeometryWithBowls(
   return result.geometry;
 }
 
+interface DimensionNodeBox {
+  dimBox: Box3;
+  size: Vector3;
+  center: Vector3;
+}
+
+function getDimensionNodeBox(scene: Object3D): DimensionNodeBox | null {
+  let dimensionMesh: Mesh | null = null;
+  scene.traverse((child: Object3D) => {
+    if (!dimensionMesh && child instanceof Mesh && isDimensionObject(child)) {
+      dimensionMesh = child;
+    }
+  });
+
+  const targetMesh = dimensionMesh as Mesh | null;
+  if (!targetMesh || !targetMesh.geometry) return null;
+
+  const posAttr = targetMesh.geometry.attributes.position;
+  if (!posAttr) return null;
+
+  scene.updateMatrixWorld(true);
+
+  const dimBox = new Box3();
+  const meshToSceneMatrix = new Matrix4();
+  meshToSceneMatrix.copy(scene.matrixWorld).invert().multiply(targetMesh.matrixWorld);
+
+  const tempV = new Vector3();
+  for (let i = 0; i < posAttr.count; i++) {
+    tempV.fromBufferAttribute(posAttr, i);
+    tempV.applyMatrix4(meshToSceneMatrix);
+    dimBox.expandByPoint(tempV);
+  }
+
+  const size = new Vector3();
+  const center = new Vector3();
+  dimBox.getSize(size);
+  dimBox.getCenter(center);
+
+  return { dimBox, size, center };
+}
+
 function getScaledModelFootprint(scene: Object3D, targetWidth: number, targetDepth: number) {
   const box = new Box3().setFromObject(scene);
   const size = new Vector3();
   box.getSize(size);
 
-  const scale = Math.min(targetWidth / Math.max(size.x, 0.001), targetDepth / Math.max(size.z, 0.001));
+  const dimInfo = getDimensionNodeBox(scene);
+  const scale = dimInfo
+    ? Math.min(targetWidth / Math.max(dimInfo.size.x, 0.001), targetDepth / Math.max(dimInfo.size.z, 0.001))
+    : Math.min(targetWidth / Math.max(size.x, 0.001), targetDepth / Math.max(size.z, 0.001));
 
   return {
-    depth: size.z * scale,
-    width: size.x * scale,
+    depth: (dimInfo ? dimInfo.size.z : size.z) * scale,
+    width: (dimInfo ? dimInfo.size.x : size.x) * scale,
+  };
+}
+
+function getDimensionNodeMeasurements(
+  scene: Object3D,
+  targetWidth: number,
+  targetDepth: number
+) {
+  const dimInfo = getDimensionNodeBox(scene);
+  if (!dimInfo) return null;
+
+  const scale = Math.min(
+    targetWidth / Math.max(dimInfo.size.x, 0.001),
+    targetDepth / Math.max(dimInfo.size.z, 0.001)
+  );
+
+  const sceneLength = dimInfo.size.x * scale;
+  const sceneDepth = dimInfo.size.z * scale;
+  const lengthMm = Math.round(sceneLength * unit);
+  const depthMm = Math.round(sceneDepth * unit);
+
+  return {
+    sceneLength,
+    sceneDepth,
+    lengthMm,
+    depthMm,
+    lengthInches: (lengthMm / 25.4).toFixed(2),
+    depthInches: (depthMm / 25.4).toFixed(2),
   };
 }
 
@@ -335,8 +429,9 @@ function CountertopModel(props: CountertopModelProps) {
   );
 }
 
-function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sinkHeight, width, x, z }: Required<BasinModelProps>) {
-  const { scene } = useGLTF(modelUrl);
+function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, showDimensions, sinkHeight, width, x, z }: BasinModelProps) {
+  const gltf = useGLTF(modelUrl ?? bowlModelUrls["UB-04-M"]) as any;
+  const scene: Object3D = gltf.scene;
   const object = useMemo(() => {
     const surfaceRoughness = bowlFinish === "matte" ? 0.72 : 0.2;
     const clone = scene.clone(true);
@@ -352,18 +447,50 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
       ? clone.worldToLocal(countertopTopMarker.getWorldPosition(new Vector3()))
       : undefined;
 
-    const scale = Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001));
-    clone.position.x = -center.x * scale;
-    clone.position.z = -center.z * scale;
+    const dimInfo = getDimensionNodeBox(clone);
+    const scale = dimInfo
+      ? Math.min(width / Math.max(dimInfo.size.x, 0.001), depth / Math.max(dimInfo.size.z, 0.001))
+      : Math.min(width / Math.max(size.x, 0.001), depth / Math.max(size.z, 0.001));
+
+    const centerTarget = dimInfo ? dimInfo.center : center;
+
+    clone.position.x = -centerTarget.x * scale;
+    clone.position.z = -centerTarget.z * scale;
     clone.position.y = -(markerPosition?.y ?? box.max.y) * scale;
     clone.scale.setScalar(scale);
     clone.updateMatrixWorld(true);
-    clone.traverse((child) => {
-      child.castShadow = true;
-      child.receiveShadow = true;
-
+    clone.traverse((child: Object3D) => {
       if (child instanceof Mesh) {
         const modelPart = findModelPart(child);
+
+        // Hide dimension node if found without removing from scene by making its ior 0
+        if (modelPart === "dimension") {
+          child.visible = false;
+          child.castShadow = false;
+          child.receiveShadow = false;
+          const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
+          const materials = sourceMaterials.map((sourceMaterial) => {
+            const material = sourceMaterial instanceof MeshPhysicalMaterial
+              ? sourceMaterial.clone()
+              : new MeshPhysicalMaterial();
+
+            material.ior = 0;
+            material.transmission = 1;
+            material.opacity = 0;
+            material.transparent = true;
+            material.depthWrite = false;
+            material.colorWrite = false;
+            material.visible = false;
+            material.needsUpdate = true;
+            return material;
+          });
+          child.material = Array.isArray(child.material) ? materials : materials[0];
+          return;
+        }
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
         if (modelPart === "connector") conformConnectorNormals(child);
         const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
         const materials = sourceMaterials.map((sourceMaterial) => {
@@ -402,7 +529,7 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
 
   useEffect(() => {
     return () => {
-      object.traverse((child) => {
+      object.traverse((child: Object3D) => {
         if (child instanceof Mesh) {
           const materials = Array.isArray(child.material) ? child.material : [child.material];
           materials.forEach((material) => material.dispose());
@@ -419,9 +546,9 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, si
   );
 }
 
-function BasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sinkHeight, width, x, z }: BasinModelProps) {
+function BasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, showDimensions, sinkHeight, width, x, z }: BasinModelProps) {
   if (modelUrl) {
-    return <GLBBasinModel bowlColor={bowlColor} bowlFinish={bowlFinish} depth={depth} drainFinish={drainFinish} modelUrl={modelUrl} sinkHeight={sinkHeight} width={width} x={x} z={z} />;
+    return <GLBBasinModel bowlColor={bowlColor} bowlFinish={bowlFinish} depth={depth} drainFinish={drainFinish} modelUrl={modelUrl} showDimensions={showDimensions} sinkHeight={sinkHeight} width={width} x={x} z={z} />;
   }
 
   const rim = 0.09;
@@ -487,10 +614,13 @@ function Line({ start, end, color = "#1a1a1a" }: { start: [number, number, numbe
 interface MeasurementsProps {
   show: boolean;
   config: SinkConfiguration;
+  modelUrl?: string;
 }
 
-function Measurements({ show, config }: MeasurementsProps) {
+function Measurements({ show, config, modelUrl }: MeasurementsProps) {
   if (!show) return null;
+
+  const { scene } = useGLTF(modelUrl ?? bowlModelUrls["UB-04-M"]);
 
   const dims = mergedDimensions(config);
   const length = Number(dims.L || 1000);
@@ -529,8 +659,10 @@ function Measurements({ show, config }: MeasurementsProps) {
   const sinkEndZ = sceneDepth / 2 - sceneFrontInset;
   const sinkCenterZ = (sinkStartZ + sinkEndZ) / 2;
 
-  // Measurement lines and styling (previous clean slate gray UI)
-  const color = "#636363";
+  // Measurement lines and styling (categorized: Overall, Sink, Faucets)
+  const colorOverall = "#df2727";
+  const colorSink = "#0055ff";
+  const colorFaucet = "#00d664";
   const hasCountertopSupport = config.mountingType === "countertop";
   const floorY = hasCountertopSupport ? 0.01 : -0.05;
   const floorLabelY = hasCountertopSupport ? 0.015 : -0.05;
@@ -551,8 +683,19 @@ function Measurements({ show, config }: MeasurementsProps) {
 
   const singleBowlDepthMm = Math.max(220, Number(dims.D1 || 400));
   const singleBowlSceneDepth = toScene(singleBowlDepthMm);
-  const singleBowlLengthInches = (singleBowlLengthMm / 25.4).toFixed(2);
-  const singleBowlDepthInches = (singleBowlDepthMm / 25.4).toFixed(2);
+
+  const dimensionNodeBounds = useMemo(() => {
+    if (!modelUrl) return null;
+    return getDimensionNodeMeasurements(scene, singleBowlSceneLength, singleBowlSceneDepth);
+  }, [modelUrl, scene, singleBowlSceneDepth, singleBowlSceneLength]);
+
+  const effectiveBowlLengthMm = dimensionNodeBounds ? dimensionNodeBounds.lengthMm : singleBowlLengthMm;
+  const effectiveBowlDepthMm = dimensionNodeBounds ? dimensionNodeBounds.depthMm : singleBowlDepthMm;
+  const effectiveBowlSceneLength = dimensionNodeBounds ? dimensionNodeBounds.sceneLength : singleBowlSceneLength;
+  const effectiveBowlSceneDepth = dimensionNodeBounds ? dimensionNodeBounds.sceneDepth : singleBowlSceneDepth;
+
+  const singleBowlLengthInches = (effectiveBowlLengthMm / 25.4).toFixed(2);
+  const singleBowlDepthInches = (effectiveBowlDepthMm / 25.4).toFixed(2);
   const leftInsetInches = (leftInset / 25.4).toFixed(2);
   const rightInsetInches = (rightInset / 25.4).toFixed(2);
   const rearInsetInches = (rearInset / 25.4).toFixed(2);
@@ -560,8 +703,6 @@ function Measurements({ show, config }: MeasurementsProps) {
   const bowlSpacingInches = (Number(dims.bowlSpacing || 0) / 25.4).toFixed(2);
   const drainDistanceInches = ((rearInset + singleBowlDepthMm / 2) / 25.4).toFixed(2);
   const bottomToCenterInches = ((frontInset + singleBowlDepthMm / 2) / 25.4).toFixed(2);
-  const faucetToTopInches = ((rearInset / 2) / 25.4).toFixed(2);
-  const basinToFaucetInches = ((rearInset / 2) / 25.4).toFixed(2);
 
   const faucetHolesType = config.faucetHoles ?? "none";
   const hasFaucetHoles = faucetHolesType !== "none";
@@ -574,16 +715,14 @@ function Measurements({ show, config }: MeasurementsProps) {
     : (faucetHolesType === "widespread" || faucetHolesType === "3_hole_3in" ? 8 : 0);
   const spacingMm = spacingInches * 25.4;
 
-  const faucetDeckZ = -sceneDepth / 2 + sceneRearInset / 2;
   const topEdgeZ = -sceneDepth / 2;
-  const basinRearRimZ = -sceneDepth / 2 + sceneRearInset;
 
   const bowls = Array.from({ length: bowlCount }, (_, index) => {
-    const startX = -sceneLength / 2 + sceneLeftInset + index * (singleBowlSceneLength + bowlInternalGap);
-    const endX = startX + singleBowlSceneLength;
+    const startX = -sceneLength / 2 + sceneLeftInset + index * (effectiveBowlSceneLength + bowlInternalGap);
+    const endX = startX + effectiveBowlSceneLength;
     const centerX = (startX + endX) / 2;
     const startZ = -sceneDepth / 2 + sceneRearInset;
-    const endZ = startZ + singleBowlSceneDepth;
+    const endZ = startZ + effectiveBowlSceneDepth;
     const centerZ = (startZ + endZ) / 2;
     return { startX, endX, centerX, startZ, endZ, centerZ };
   });
@@ -591,20 +730,21 @@ function Measurements({ show, config }: MeasurementsProps) {
   const firstBowl = bowls[0];
   const lastBowl = bowls[bowls.length - 1];
 
-  // For the four new bowls (SR-14, SR-15, SR-18, SR-19), the outer collar/border extends 20mm beyond the inner basin cavity.
-  // Calculate their interior dimensions from the inside basin walls rather than the outer border.
-  const isNewBowl = config.bowl?.id === "SR-14" || config.bowl?.id === "SR-15" || config.bowl?.id === "SR-18" || config.bowl?.id === "SR-19";
-  const bowlRimX = isNewBowl ? toScene(20) : 0;
-  const bowlRimZ = isNewBowl ? toScene(20) : 0;
+  const innerStartX = firstBowl.startX;
+  const innerEndX = firstBowl.endX;
+  const innerStartZ = firstBowl.startZ;
+  const innerEndZ = firstBowl.endZ;
 
-  const innerStartX = firstBowl.startX + bowlRimX;
-  const innerEndX = firstBowl.endX - bowlRimX;
-  const innerStartZ = firstBowl.startZ + bowlRimZ;
-  const innerEndZ = firstBowl.endZ - bowlRimZ;
+  const lastInnerEndX = lastBowl.endX;
+  const lastInnerEndZ = lastBowl.endZ;
+
+  const faucetDeckZ = (topEdgeZ + innerStartZ) / 2;
+  const faucetToTopInches = (((innerStartZ - topEdgeZ) * unit / 2) / 25.4).toFixed(2);
+  const basinToFaucetInches = faucetToTopInches;
 
   // First bowl inner measurements - placed inside the basin, offset away from walls/rims with clean clearance so lines do not join
-  const clearanceX = isNewBowl ? 0.012 : Math.min(0.04, Math.max(0.02, singleBowlSceneLength * 0.012));
-  const clearanceZ = isNewBowl ? 0.012 : Math.min(0.04, Math.max(0.02, singleBowlSceneDepth * 0.015));
+  const clearanceX = dimensionNodeBounds ? 0 : Math.min(0.04, Math.max(0.02, singleBowlSceneLength * 0.012));
+  const clearanceZ = dimensionNodeBounds ? 0 : Math.min(0.04, Math.max(0.02, singleBowlSceneDepth * 0.015));
 
   const firstLineStartX = innerStartX + clearanceX;
   const firstLineEndX = innerEndX - clearanceX;
@@ -619,14 +759,12 @@ function Measurements({ show, config }: MeasurementsProps) {
   const isOval = config.bowl?.id === "UB-02" || config.bowl?.id === "UB-03" || config.bowl?.id === "SR-14" || config.bowl?.id === "SR-18" || config.bowl?.name?.toLowerCase().includes("oval") || false;
 
   // Positions for rear inset, front inset, top to center, bottom to center, faucet deck
-  const rearInsetLineX = firstBowl.startX + Math.min(0.08, singleBowlSceneLength * 0.08);
-  const frontInsetLineX = lastBowl.endX - Math.min(0.10, singleBowlSceneLength * 0.12);
+  const rearInsetLineX = -sceneLength / 2 - 0.05;
+  const frontInsetLineX = sceneLength / 2 + 0.05;
   const topToCenterLineX = lastBowl.endX - Math.min(0.26, singleBowlSceneLength * 0.22);
   const bottomToCenterLineX = lastBowl.centerX + Math.min(0.14, singleBowlSceneLength * 0.18);
 
-  const faucetOffset = Math.min(0.06, singleBowlSceneLength * 0.08);
-  const faucetToTopLineX = lastBowl.centerX - faucetOffset;
-  const basinToFaucetLineX = lastBowl.centerX + faucetOffset;
+  const faucetDeckLineX = lastBowl.centerX + 0.14;
   const faucetLineOffsetFromTop = Math.min(0.12, Math.max(0.06, sceneHeight * 0.15));
   const faucetLineY = topY - faucetLineOffsetFromTop;
   const faucetLineZ = topEdgeZ - 0.012;
@@ -638,10 +776,10 @@ function Measurements({ show, config }: MeasurementsProps) {
     <group>
       {/* 1. Left Inset (L2): Left countertop edge to first bowl rim */}
       <group>
-        <Line start={[-sceneLength / 2, rimLineY, firstBowl.centerZ]} end={[firstBowl.startX, rimLineY, firstBowl.centerZ]} color={color} />
-        <Line start={[-sceneLength / 2, rimLineY, firstBowl.centerZ - tickSize]} end={[-sceneLength / 2, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-        <Line start={[firstBowl.startX, rimLineY, firstBowl.centerZ - tickSize]} end={[firstBowl.startX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-        <Html position={[(-sceneLength / 2 + firstBowl.startX) / 2, rimLabelY, firstBowl.centerZ]} center>
+        <Line start={[-sceneLength / 2, rimLineY, firstBowl.centerZ]} end={[innerStartX, rimLineY, firstBowl.centerZ]} color={colorSink} />
+        <Line start={[-sceneLength / 2, rimLineY, firstBowl.centerZ - tickSize]} end={[-sceneLength / 2, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+        <Line start={[innerStartX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerStartX, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+        <Html position={[(-sceneLength / 2 + innerStartX) / 2, rimLabelY, firstBowl.centerZ - 0.05]} center>
           <div className="measurement-label">{leftInsetInches} in</div>
         </Html>
       </group>
@@ -651,20 +789,20 @@ function Measurements({ show, config }: MeasurementsProps) {
         <group>
           {/* Oval Width (Major Axis) across center */}
           <group>
-            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ]} color={color} />
-            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-            <Line start={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-            <Html position={[firstBowl.centerX, rimLabelY, firstBowl.centerZ]} center>
+            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ]} color={colorSink} />
+            <Line start={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerStartX + clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+            <Line start={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ - tickSize]} end={[innerEndX - clearanceX, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+            <Html position={[firstBowl.centerX - effectiveBowlSceneLength * 0.22, rimLabelY, firstBowl.centerZ + 0.05]} center>
               <div className="measurement-label">{singleBowlLengthInches} in</div>
             </Html>
           </group>
 
           {/* Oval Depth (Minor Axis) across center */}
           <group>
-            <Line start={[firstBowl.centerX, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX, rimLineY, innerEndZ - clearanceZ]} color={color} />
-            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerStartZ + clearanceZ]} color={color} />
-            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerEndZ - clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerEndZ - clearanceZ]} color={color} />
-            <Html position={[firstBowl.centerX, rimLabelY, firstBowl.centerZ - (isNewBowl ? toScene(50) : 0.05)]} center>
+            <Line start={[firstBowl.centerX, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX, rimLineY, innerEndZ - clearanceZ]} color={colorSink} />
+            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerStartZ + clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerStartZ + clearanceZ]} color={colorSink} />
+            <Line start={[firstBowl.centerX - tickSize, rimLineY, innerEndZ - clearanceZ]} end={[firstBowl.centerX + tickSize, rimLineY, innerEndZ - clearanceZ]} color={colorSink} />
+            <Html position={[firstBowl.centerX + 0.08, rimLabelY, firstBowl.centerZ - effectiveBowlSceneDepth * 0.22]} center>
               <div className="measurement-label">{singleBowlDepthInches} in</div>
             </Html>
           </group>
@@ -673,32 +811,32 @@ function Measurements({ show, config }: MeasurementsProps) {
         <group>
           {/* Bowl Width along the rear inside wall of the first basin */}
           <group>
-            <Line start={[firstLineStartX, rimLineY, firstInnerRearZ]} end={[firstLineEndX, rimLineY, firstInnerRearZ]} color={color} />
-            <Line start={[firstLineStartX, rimLineY, firstInnerRearZ - tickSize]} end={[firstLineStartX, rimLineY, firstInnerRearZ + tickSize]} color={color} />
-            <Line start={[firstLineEndX, rimLineY, firstInnerRearZ - tickSize]} end={[firstLineEndX, rimLineY, firstInnerRearZ + tickSize]} color={color} />
-            <Html position={[firstBowl.centerX, rimLabelY, firstInnerRearZ]} center>
+            <Line start={[firstLineStartX, rimLineY, firstInnerRearZ]} end={[firstLineEndX, rimLineY, firstInnerRearZ]} color={colorSink} />
+            <Line start={[firstLineStartX, rimLineY, firstInnerRearZ - tickSize]} end={[firstLineStartX, rimLineY, firstInnerRearZ + tickSize]} color={colorSink} />
+            <Line start={[firstLineEndX, rimLineY, firstInnerRearZ - tickSize]} end={[firstLineEndX, rimLineY, firstInnerRearZ + tickSize]} color={colorSink} />
+            <Html position={[firstBowl.centerX, rimLabelY, firstInnerRearZ + 0.05]} center>
               <div className="measurement-label">{singleBowlLengthInches} in</div>
             </Html>
           </group>
 
           {/* Bowl Depth along the left inside wall of the first basin */}
           <group>
-            <Line start={[firstInnerLeftX, rimLineY, firstLineStartZ]} end={[firstInnerLeftX, rimLineY, firstLineEndZ]} color={color} />
-            <Line start={[firstInnerLeftX - tickSize, rimLineY, firstLineStartZ]} end={[firstInnerLeftX + tickSize, rimLineY, firstLineStartZ]} color={color} />
-            <Line start={[firstInnerLeftX - tickSize, rimLineY, firstLineEndZ]} end={[firstInnerLeftX + tickSize, rimLineY, firstLineEndZ]} color={color} />
-            <Html position={[firstInnerLeftX, rimLabelY, firstBowl.centerZ]} center>
+            <Line start={[firstInnerLeftX, rimLineY, firstLineStartZ]} end={[firstInnerLeftX, rimLineY, firstLineEndZ]} color={colorSink} />
+            <Line start={[firstInnerLeftX - tickSize, rimLineY, firstLineStartZ]} end={[firstInnerLeftX + tickSize, rimLineY, firstLineStartZ]} color={colorSink} />
+            <Line start={[firstInnerLeftX - tickSize, rimLineY, firstLineEndZ]} end={[firstInnerLeftX + tickSize, rimLineY, firstLineEndZ]} color={colorSink} />
+            <Html position={[firstInnerLeftX + 0.06, rimLabelY, firstBowl.centerZ]} center>
               <div className="measurement-label">{singleBowlDepthInches} in</div>
             </Html>
           </group>
         </group>
       )}
 
-      {/* 3. Rear Inset (D2): Top/Back edge of countertop to rear bowl rim */}
+      {/* 3. Rear Inset (D2): Top/Back edge of countertop to rear bowl rim - moved to left outer edge as indicated */}
       <group>
-        <Line start={[rearInsetLineX, rimLineY, topEdgeZ]} end={[rearInsetLineX, rimLineY, firstBowl.startZ]} color={color} />
-        <Line start={[rearInsetLineX - tickSize, rimLineY, topEdgeZ]} end={[rearInsetLineX + tickSize, rimLineY, topEdgeZ]} color={color} />
-        <Line start={[rearInsetLineX - tickSize, rimLineY, firstBowl.startZ]} end={[rearInsetLineX + tickSize, rimLineY, firstBowl.startZ]} color={color} />
-        <Html position={[rearInsetLineX, rimLabelY, (topEdgeZ + firstBowl.startZ) / 2]} center>
+        <Line start={[rearInsetLineX, rimLineY, topEdgeZ]} end={[rearInsetLineX, rimLineY, innerStartZ]} color={colorSink} />
+        <Line start={[-sceneLength / 2, rimLineY, topEdgeZ]} end={[rearInsetLineX - tickSize, rimLineY, topEdgeZ]} color={colorSink} />
+        <Line start={[-sceneLength / 2, rimLineY, innerStartZ]} end={[rearInsetLineX - tickSize, rimLineY, innerStartZ]} color={colorSink} />
+        <Html position={[rearInsetLineX - 0.07, rimLabelY, (topEdgeZ + innerStartZ) / 2]} center>
           <div className="measurement-label">{rearInsetInches} in</div>
         </Html>
       </group>
@@ -710,10 +848,10 @@ function Measurements({ show, config }: MeasurementsProps) {
           const gapEndX = bowls[index + 1].startX;
           return (
             <group key={`bowl-gap-${index}`}>
-              <Line start={[gapStartX, rimLineY, firstBowl.centerZ]} end={[gapEndX, rimLineY, firstBowl.centerZ]} color={color} />
-              <Line start={[gapStartX, rimLineY, firstBowl.centerZ - tickSize]} end={[gapStartX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-              <Line start={[gapEndX, rimLineY, firstBowl.centerZ - tickSize]} end={[gapEndX, rimLineY, firstBowl.centerZ + tickSize]} color={color} />
-              <Html position={[(gapStartX + gapEndX) / 2, rimLabelY, firstBowl.centerZ]} center>
+              <Line start={[gapStartX, rimLineY, firstBowl.centerZ]} end={[gapEndX, rimLineY, firstBowl.centerZ]} color={colorSink} />
+              <Line start={[gapStartX, rimLineY, firstBowl.centerZ - tickSize]} end={[gapStartX, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+              <Line start={[gapEndX, rimLineY, firstBowl.centerZ - tickSize]} end={[gapEndX, rimLineY, firstBowl.centerZ + tickSize]} color={colorSink} />
+              <Html position={[(gapStartX + gapEndX) / 2, rimLabelY, firstBowl.centerZ - 0.05]} center>
                 <div className="measurement-label">{bowlSpacingInches} in</div>
               </Html>
             </group>
@@ -722,83 +860,83 @@ function Measurements({ show, config }: MeasurementsProps) {
 
       {/* 5. Right Inset (L3): Last bowl right rim to countertop right edge */}
       <group>
-        <Line start={[lastBowl.endX, rimLineY, lastBowl.centerZ]} end={[sceneLength / 2, rimLineY, lastBowl.centerZ]} color={color} />
-        <Line start={[lastBowl.endX, rimLineY, lastBowl.centerZ - tickSize]} end={[lastBowl.endX, rimLineY, lastBowl.centerZ + tickSize]} color={color} />
-        <Line start={[sceneLength / 2, rimLineY, lastBowl.centerZ - tickSize]} end={[sceneLength / 2, rimLineY, lastBowl.centerZ + tickSize]} color={color} />
-        <Html position={[(lastBowl.endX + sceneLength / 2) / 2, rimLabelY, lastBowl.centerZ]} center>
+        <Line start={[lastInnerEndX, rimLineY, lastBowl.centerZ]} end={[sceneLength / 2, rimLineY, lastBowl.centerZ]} color={colorSink} />
+        <Line start={[lastInnerEndX, rimLineY, lastBowl.centerZ - tickSize]} end={[lastInnerEndX, rimLineY, lastBowl.centerZ + tickSize]} color={colorSink} />
+        <Line start={[sceneLength / 2, rimLineY, lastBowl.centerZ - tickSize]} end={[sceneLength / 2, rimLineY, lastBowl.centerZ + tickSize]} color={colorSink} />
+        <Html position={[(lastInnerEndX + sceneLength / 2) / 2, rimLabelY, lastBowl.centerZ - 0.05]} center>
           <div className="measurement-label">{rightInsetInches} in</div>
         </Html>
       </group>
 
       {/* 6. Back Edge to Center (Top to Center, shown on right/last bowl) */}
       <group>
-        <Line start={[topToCenterLineX, rimLineY, topEdgeZ]} end={[topToCenterLineX, rimLineY, lastBowl.centerZ]} color={color} />
-        <Line start={[topToCenterLineX - tickSize, rimLineY, topEdgeZ]} end={[topToCenterLineX + tickSize, rimLineY, topEdgeZ]} color={color} />
-        <Line start={[topToCenterLineX - tickSize, rimLineY, lastBowl.centerZ]} end={[topToCenterLineX + tickSize, rimLineY, lastBowl.centerZ]} color={color} />
-        <Html position={[topToCenterLineX - 0.05, rimLabelY, (topEdgeZ + lastBowl.centerZ) / 2]} center>
+        <Line start={[topToCenterLineX, rimLineY, topEdgeZ]} end={[topToCenterLineX, rimLineY, lastBowl.centerZ]} color={colorSink} />
+        <Line start={[topToCenterLineX - tickSize, rimLineY, topEdgeZ]} end={[topToCenterLineX + tickSize, rimLineY, topEdgeZ]} color={colorSink} />
+        <Line start={[topToCenterLineX - tickSize, rimLineY, lastBowl.centerZ]} end={[topToCenterLineX + tickSize, rimLineY, lastBowl.centerZ]} color={colorSink} />
+        <Html position={[topToCenterLineX + 0.06, rimLabelY, (topEdgeZ + lastBowl.centerZ) / 2]} center>
           <div className="measurement-label">{drainDistanceInches} in</div>
         </Html>
       </group>
 
       {/* 7. Front Edge to Center (Bottom to Center, shown on right/last bowl, offset on different vertical line) */}
       <group>
-        <Line start={[bottomToCenterLineX, rimLineY, lastBowl.centerZ]} end={[bottomToCenterLineX, rimLineY, sceneDepth / 2]} color={color} />
-        <Line start={[bottomToCenterLineX - tickSize, rimLineY, lastBowl.centerZ]} end={[bottomToCenterLineX + tickSize, rimLineY, lastBowl.centerZ]} color={color} />
-        <Line start={[bottomToCenterLineX - tickSize, rimLineY, sceneDepth / 2]} end={[bottomToCenterLineX + tickSize, rimLineY, sceneDepth / 2]} color={color} />
-        <Html position={[bottomToCenterLineX + 0.05, rimLabelY, (lastBowl.centerZ + sceneDepth / 2) / 2]} center>
+        <Line start={[bottomToCenterLineX, rimLineY, lastBowl.centerZ]} end={[bottomToCenterLineX, rimLineY, sceneDepth / 2]} color={colorSink} />
+        <Line start={[bottomToCenterLineX - tickSize, rimLineY, lastBowl.centerZ]} end={[bottomToCenterLineX + tickSize, rimLineY, lastBowl.centerZ]} color={colorSink} />
+        <Line start={[bottomToCenterLineX - tickSize, rimLineY, sceneDepth / 2]} end={[bottomToCenterLineX + tickSize, rimLineY, sceneDepth / 2]} color={colorSink} />
+        <Html position={[bottomToCenterLineX + 0.06, rimLabelY, (lastBowl.centerZ + sceneDepth / 2) / 2]} center>
           <div className="measurement-label">{bottomToCenterInches} in</div>
         </Html>
       </group>
 
-      {/* 8. Front Inset (D3): Front edge of right/last bowl to countertop front edge */}
+      {/* 8. Front Inset (D3): Front edge of right/last bowl to countertop front edge - moved to right outer edge as indicated */}
       <group>
-        <Line start={[frontInsetLineX, rimLineY, lastBowl.endZ]} end={[frontInsetLineX, rimLineY, sceneDepth / 2]} color={color} />
-        <Line start={[frontInsetLineX - tickSize, rimLineY, lastBowl.endZ]} end={[frontInsetLineX + tickSize, rimLineY, lastBowl.endZ]} color={color} />
-        <Line start={[frontInsetLineX - tickSize, rimLineY, sceneDepth / 2]} end={[frontInsetLineX + tickSize, rimLineY, sceneDepth / 2]} color={color} />
-        <Html position={[frontInsetLineX, rimLabelY, (lastBowl.endZ + sceneDepth / 2) / 2]} center>
+        <Line start={[frontInsetLineX, rimLineY, lastInnerEndZ]} end={[frontInsetLineX, rimLineY, sceneDepth / 2]} color={colorSink} />
+        <Line start={[sceneLength / 2, rimLineY, lastInnerEndZ]} end={[frontInsetLineX + tickSize, rimLineY, lastInnerEndZ]} color={colorSink} />
+        <Line start={[sceneLength / 2, rimLineY, sceneDepth / 2]} end={[frontInsetLineX + tickSize, rimLineY, sceneDepth / 2]} color={colorSink} />
+        <Html position={[frontInsetLineX + 0.07, rimLabelY, (lastInnerEndZ + sceneDepth / 2) / 2]} center>
           <div className="measurement-label">{frontInsetInches} in</div>
         </Html>
       </group>
 
-      {/* 9. Faucet Holes Measurements */}
+      {/* 9. Faucet Holes Measurements - moved to right side of faucet hole with labels offset */}
       {hasFaucetHoles && (
         <group>
           {/* Faucet to Top (Back edge to faucet center) */}
           <group>
-            <Line start={[faucetToTopLineX, rimLineY, topEdgeZ]} end={[faucetToTopLineX, rimLineY, faucetDeckZ]} color={color} />
-            <Line start={[faucetToTopLineX - tickSize, rimLineY, topEdgeZ]} end={[faucetToTopLineX + tickSize, rimLineY, topEdgeZ]} color={color} />
-            <Line start={[faucetToTopLineX - tickSize, rimLineY, faucetDeckZ]} end={[faucetToTopLineX + tickSize, rimLineY, faucetDeckZ]} color={color} />
-            <Html position={[faucetToTopLineX - 0.04, rimLabelY, (topEdgeZ + faucetDeckZ) / 2]} center>
+            <Line start={[faucetDeckLineX, rimLineY, topEdgeZ]} end={[faucetDeckLineX, rimLineY, faucetDeckZ]} color={colorFaucet} />
+            <Line start={[faucetDeckLineX - tickSize, rimLineY, topEdgeZ]} end={[faucetDeckLineX + tickSize, rimLineY, topEdgeZ]} color={colorFaucet} />
+            <Line start={[faucetDeckLineX - tickSize, rimLineY, faucetDeckZ]} end={[faucetDeckLineX + tickSize, rimLineY, faucetDeckZ]} color={colorFaucet} />
+            <Html position={[faucetDeckLineX + 0.08, rimLabelY, (topEdgeZ + faucetDeckZ) / 2]} center>
               <div className="measurement-label">{faucetToTopInches} in</div>
             </Html>
           </group>
 
-          {/* Basin to Faucet (Faucet center to basin rear rim) */}
+          {/* Basin to Faucet (Faucet center to basin inner opening) */}
           <group>
-            <Line start={[basinToFaucetLineX, rimLineY, faucetDeckZ]} end={[basinToFaucetLineX, rimLineY, basinRearRimZ]} color={color} />
-            <Line start={[basinToFaucetLineX - tickSize, rimLineY, faucetDeckZ]} end={[basinToFaucetLineX + tickSize, rimLineY, faucetDeckZ]} color={color} />
-            <Line start={[basinToFaucetLineX - tickSize, rimLineY, basinRearRimZ]} end={[basinToFaucetLineX + tickSize, rimLineY, basinRearRimZ]} color={color} />
-            <Html position={[basinToFaucetLineX + 0.04, rimLabelY, (faucetDeckZ + basinRearRimZ) / 2]} center>
+            <Line start={[faucetDeckLineX, rimLineY, faucetDeckZ]} end={[faucetDeckLineX, rimLineY, innerStartZ]} color={colorFaucet} />
+            <Line start={[faucetDeckLineX - tickSize, rimLineY, faucetDeckZ]} end={[faucetDeckLineX + tickSize, rimLineY, faucetDeckZ]} color={colorFaucet} />
+            <Line start={[faucetDeckLineX - tickSize, rimLineY, innerStartZ]} end={[faucetDeckLineX + tickSize, rimLineY, innerStartZ]} color={colorFaucet} />
+            <Html position={[faucetDeckLineX + 0.08, rimLabelY, (faucetDeckZ + innerStartZ) / 2]} center>
               <div className="measurement-label">{basinToFaucetInches} in</div>
             </Html>
           </group>
 
           {/* Left Edge to First Faucet Center - placed along the outer vertical face where red line is */}
           <group>
-            <Line start={[-sceneLength / 2, faucetLineY, faucetLineZ]} end={[firstBowl.centerX, faucetLineY, faucetLineZ]} color={color} />
-            <Line start={[-sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[-sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
-            <Line start={[firstBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[firstBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
-            <Html position={[(-sceneLength / 2 + firstBowl.centerX) / 2, faucetLabelY, faucetLabelZ]} center>
+            <Line start={[-sceneLength / 2, faucetLineY, faucetLineZ]} end={[firstBowl.centerX, faucetLineY, faucetLineZ]} color={colorFaucet} />
+            <Line start={[-sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[-sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={colorFaucet} />
+            <Line start={[firstBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[firstBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={colorFaucet} />
+            <Html position={[(-sceneLength / 2 + firstBowl.centerX) / 2, faucetLineY - 0.06, faucetLabelZ]} center>
               <div className="measurement-label">Left to Faucet: {leftToFirstCenterIn} in</div>
             </Html>
           </group>
 
           {/* Right Edge to Last Faucet Center - placed along the outer vertical face where red line is */}
           <group>
-            <Line start={[lastBowl.centerX, faucetLineY, faucetLineZ]} end={[sceneLength / 2, faucetLineY, faucetLineZ]} color={color} />
-            <Line start={[lastBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[lastBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
-            <Line start={[sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={color} />
-            <Html position={[(lastBowl.centerX + sceneLength / 2) / 2, faucetLabelY, faucetLabelZ]} center>
+            <Line start={[lastBowl.centerX, faucetLineY, faucetLineZ]} end={[sceneLength / 2, faucetLineY, faucetLineZ]} color={colorFaucet} />
+            <Line start={[lastBowl.centerX, faucetLineY - faucetTickSize, faucetLineZ]} end={[lastBowl.centerX, faucetLineY + faucetTickSize, faucetLineZ]} color={colorFaucet} />
+            <Line start={[sceneLength / 2, faucetLineY - faucetTickSize, faucetLineZ]} end={[sceneLength / 2, faucetLineY + faucetTickSize, faucetLineZ]} color={colorFaucet} />
+            <Html position={[(lastBowl.centerX + sceneLength / 2) / 2, faucetLineY - 0.06, faucetLabelZ]} center>
               <div className="measurement-label">Right to Faucet: {rightToLastCenterIn} in</div>
             </Html>
           </group>
@@ -809,19 +947,19 @@ function Measurements({ show, config }: MeasurementsProps) {
               <Line
                 start={[lastBowl.centerX - toScene(spacingMm), rimLineY, faucetDeckZ]}
                 end={[lastBowl.centerX, rimLineY, faucetDeckZ]}
-                color={color}
+                color={colorFaucet}
               />
               <Line
                 start={[lastBowl.centerX - toScene(spacingMm), rimLineY, faucetDeckZ - tickSize]}
                 end={[lastBowl.centerX - toScene(spacingMm), rimLineY, faucetDeckZ + tickSize]}
-                color={color}
+                color={colorFaucet}
               />
               <Line
                 start={[lastBowl.centerX, rimLineY, faucetDeckZ - tickSize]}
                 end={[lastBowl.centerX, rimLineY, faucetDeckZ + tickSize]}
-                color={color}
+                color={colorFaucet}
               />
-              <Html position={[lastBowl.centerX - toScene(spacingMm) / 2, rimLabelY, faucetDeckZ]} center>
+              <Html position={[lastBowl.centerX - toScene(spacingMm) / 2, rimLabelY, faucetDeckZ + 0.05]} center>
                 <div className="measurement-label">
                   {spacingInches} in
                 </div>
@@ -831,32 +969,32 @@ function Measurements({ show, config }: MeasurementsProps) {
         </group>
       )}
 
-      {/* 10. Overall Width (Length) on floor or countertop - UNTOUCHED */}
+      {/* 10. Overall Width (Length) on floor or countertop */}
       <group>
-        <Line start={[-sceneLength / 2, floorY, zOverall]} end={[sceneLength / 2, floorY, zOverall]} color={color} />
-        <Line start={[-sceneLength / 2, floorY, zOverall - 0.07]} end={[-sceneLength / 2, floorY, zOverall + 0.07]} color={color} />
-        <Line start={[sceneLength / 2, floorY, zOverall - 0.07]} end={[sceneLength / 2, floorY, zOverall + 0.07]} color={color} />
-        <Html position={[0, floorLabelY, zOverall]} center>
+        <Line start={[-sceneLength / 2, floorY, zOverall]} end={[sceneLength / 2, floorY, zOverall]} color={colorOverall} />
+        <Line start={[-sceneLength / 2, floorY, zOverall - 0.07]} end={[-sceneLength / 2, floorY, zOverall + 0.07]} color={colorOverall} />
+        <Line start={[sceneLength / 2, floorY, zOverall - 0.07]} end={[sceneLength / 2, floorY, zOverall + 0.07]} color={colorOverall} />
+        <Html position={[0, floorLabelY, zOverall + 0.06]} center>
           <div className="measurement-label">{lengthInches} in</div>
         </Html>
       </group>
 
-      {/* 11. Overall Depth on floor or countertop - UNTOUCHED */}
+      {/* 11. Overall Depth on floor or countertop */}
       <group>
-        <Line start={[xOverall, floorY, -sceneDepth / 2]} end={[xOverall, floorY, sceneDepth / 2]} color={color} />
-        <Line start={[xOverall - 0.07, floorY, -sceneDepth / 2]} end={[xOverall + 0.07, floorY, -sceneDepth / 2]} color={color} />
-        <Line start={[xOverall - 0.07, floorY, sceneDepth / 2]} end={[xOverall + 0.07, floorY, sceneDepth / 2]} color={color} />
-        <Html position={[xOverall, floorLabelY, 0]} center>
+        <Line start={[xOverall, floorY, -sceneDepth / 2]} end={[xOverall, floorY, sceneDepth / 2]} color={colorOverall} />
+        <Line start={[xOverall - 0.07, floorY, -sceneDepth / 2]} end={[xOverall + 0.07, floorY, -sceneDepth / 2]} color={colorOverall} />
+        <Line start={[xOverall - 0.07, floorY, sceneDepth / 2]} end={[xOverall + 0.07, floorY, sceneDepth / 2]} color={colorOverall} />
+        <Html position={[xOverall + 0.06, floorLabelY, 0]} center>
           <div className="measurement-label">{depthInches} in</div>
         </Html>
       </group>
 
-      {/* 12. Overall Height - UNTOUCHED */}
+      {/* 12. Overall Height - moved to front right corner as indicated */}
       <group>
-        <Line start={[xOverall, bottomTickY, -sceneDepth / 2]} end={[xOverall, sceneHeight, -sceneDepth / 2]} color={color} />
-        <Line start={[xOverall - 0.07, bottomTickY, -sceneDepth / 2]} end={[xOverall + 0.07, bottomTickY, -sceneDepth / 2]} color={color} />
-        <Line start={[xOverall - 0.07, sceneHeight, -sceneDepth / 2]} end={[xOverall + 0.07, sceneHeight, -sceneDepth / 2]} color={color} />
-        <Html position={[xOverall, sceneHeight / 2, -sceneDepth / 2]} center>
+        <Line start={[xOverall, bottomTickY, sceneDepth / 2]} end={[xOverall, sceneHeight, sceneDepth / 2]} color={colorOverall} />
+        <Line start={[xOverall - 0.07, bottomTickY, sceneDepth / 2]} end={[xOverall + 0.07, bottomTickY, sceneDepth / 2]} color={colorOverall} />
+        <Line start={[xOverall - 0.07, sceneHeight, sceneDepth / 2]} end={[xOverall + 0.07, sceneHeight, sceneDepth / 2]} color={colorOverall} />
+        <Html position={[xOverall + 0.07, sceneHeight / 2, sceneDepth / 2]} center>
           <div className="measurement-label">{heightInches} in</div>
         </Html>
       </group>
@@ -892,9 +1030,18 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
   const productElevation = hasCountertopSupport ? supportThickness : 0;
   const modelUrl = config.bowl?.id ? bowlModelUrls[config.bowl.id] : undefined;
 
+  const { scene } = useGLTF(modelUrl ?? bowlModelUrls["UB-04-M"]);
+  const dimBounds = useMemo(() => {
+    if (!modelUrl) return null;
+    return getDimensionNodeMeasurements(scene, sceneBowlLength, sceneBowlDepth);
+  }, [modelUrl, scene, sceneBowlDepth, sceneBowlLength]);
+
+  const effBowlLength = dimBounds ? dimBounds.sceneLength : sceneBowlLength;
+  const effBowlDepth = dimBounds ? dimBounds.sceneDepth : sceneBowlDepth;
+
   const bowls = Array.from({ length: count }, (_, index) => ({
-    x: -sceneLength / 2 + sceneLeftInset + sceneBowlLength / 2 + index * (sceneBowlLength + sceneInternalGap),
-    z: -sceneDepth / 2 + sceneTopInset + sceneBowlDepth / 2,
+    x: -sceneLength / 2 + sceneLeftInset + effBowlLength / 2 + index * (effBowlLength + sceneInternalGap),
+    z: -sceneDepth / 2 + sceneTopInset + effBowlDepth / 2,
   }));
 
   const faucetDeckZ = -sceneDepth / 2 + sceneTopInset / 2;
@@ -940,8 +1087,8 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
         <CountertopModel
           bowlColor={appearance.bowlColor}
           bowlFinish={appearance.bowlFinish}
-          bowlDepth={sceneBowlDepth}
-          bowlWidth={sceneBowlLength}
+          bowlDepth={effBowlDepth}
+          bowlWidth={effBowlLength}
           bowls={bowls}
           depth={sceneDepth}
           faucetHoles={faucetHoles}
@@ -957,6 +1104,7 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
             drainFinish={appearance.drainFinish}
             key={index}
             modelUrl={modelUrl}
+            showDimensions={showDimensions}
             sinkHeight={sceneHeight}
             width={sceneBowlLength}
             x={bowl.x}
@@ -966,7 +1114,7 @@ function SinkModel({ appearance, arModelRef, config, showDimensions }: SinkModel
       </group>
       </group>
       <group position={[0, productElevation, 0]} rotation={[0, -0.18, 0]}>
-        <Measurements show={showDimensions} config={config} />
+        <Measurements show={showDimensions} config={config} modelUrl={modelUrl} />
       </group>
     </>
   );
@@ -1273,6 +1421,22 @@ export function Dimension3DPreview({ bowlColor = "#f7f7f5", bowlFinish = "glossy
           />
           <AutoFitCamera depth={fittedDepth} height={fittedHeight} length={fittedLength} />
         </Canvas>
+        {showDimensions && (
+          <div className="dimension-legend" aria-label="Measurement categories">
+            <div className="dimension-legend-item">
+              <span className="dimension-legend-color overall" />
+              <span>Overall</span>
+            </div>
+            <div className="dimension-legend-item">
+              <span className="dimension-legend-color sink" />
+              <span>Sink</span>
+            </div>
+            <div className="dimension-legend-item">
+              <span className="dimension-legend-color faucets" />
+              <span>Faucets</span>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
