@@ -456,7 +456,8 @@ function GLBBasinModel({ bowlColor, bowlFinish, depth, drainFinish, modelUrl, sh
 
     clone.position.x = -centerTarget.x * scale;
     clone.position.z = -centerTarget.z * scale;
-    clone.position.y = -(markerPosition?.y ?? box.max.y) * scale;
+    const anchorY = (markerPosition && markerPosition.y > 0.01) ? markerPosition.y : box.max.y;
+    clone.position.y = -anchorY * scale;
     clone.scale.setScalar(scale);
     clone.updateMatrixWorld(true);
     clone.traverse((child: Object3D) => {
